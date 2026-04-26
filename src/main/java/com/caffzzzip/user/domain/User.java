@@ -16,37 +16,33 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 카카오 고유 사용자 ID
+    @Column(nullable = false, unique = true)
+    private Long kakaoId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private SocialType socialType;
-
-
-    @Column(nullable = false)
-    private String socialId;
-
+    // 이메일
     @Column(nullable = false)
     private String email;
 
+    // 닉네임
     @Column(nullable = false)
     private String nickname;
 
-    @Column(nullable = false)
+    // 프로필 이미지
+    @Column(nullable = false, length = 1000)
     private String profileImageUrl;
 
+    // 최초 설정 완료 여부
     @Column(nullable = false)
     private boolean initialSettingCompleted;
 
     @Builder
-    public User(
-            SocialType socialType,
-            String socialId,
-            String email,
-            String nickname,
-            String profileImageUrl
-    ) {
-        this.socialType = socialType;
-        this.socialId = socialId;
+    public User(Long kakaoId,
+                String email,
+                String nickname,
+                String profileImageUrl) {
+
+        this.kakaoId = kakaoId;
         this.email = email;
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
@@ -55,5 +51,10 @@ public class User {
 
     public void completeInitialSetting() {
         this.initialSettingCompleted = true;
+    }
+
+    public void updateProfile(String nickname, String profileImageUrl) {
+        this.nickname = nickname;
+        this.profileImageUrl = profileImageUrl;
     }
 }

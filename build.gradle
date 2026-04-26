@@ -31,6 +31,15 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // Spring Security (security 심볼 해결)
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // JWT (jsonwebtoken, Jwts, Keys, Decoders 등 심볼 해결)
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+
 }
 
 
