@@ -40,3 +40,22 @@ out/
 src/main/resources/application.yml
 
 .env
+
+### Logs ###
+*.log
+logs/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Docker / local env ###
+docker-compose.override.yml
+.env.*
+!.env.example
+
+### Security / secrets ###
+*.pem
+*.key
+*.p12
+*.jks
