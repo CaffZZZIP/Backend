@@ -33,7 +33,13 @@ public class SecurityConfig {
                         // 2. 카카오 로그인 및 인증 관련 API 허용
                         .requestMatchers("/api/auth/**").permitAll()
                         // 3. Swagger 및 API 문서 허용
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
