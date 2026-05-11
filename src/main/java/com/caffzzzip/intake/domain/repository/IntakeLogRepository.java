@@ -1,4 +1,4 @@
-package com.caffzzzip.intake.domain.domain.repository;
+package com.caffzzzip.intake.domain.repository;
 
 import com.caffzzzip.intake.domain.IntakeLog;
 import org.springframework.data.jpa.repository.JpaRepository;
