@@ -9,6 +9,12 @@ import java.time.LocalTime;
 @Schema(description = "사용자 초기 루틴 설정 요청")
 public record RoutineRequest(
 
+        @Schema(description = "평일 루틴 이름", example = "수업")
+        String weekdayRoutineName,
+
+        @Schema(description = "주말 루틴 이름", example = "공강")
+        String weekendRoutineName,
+
         @Schema(description = "평일 기상 시간", example = "08:00")
         LocalTime weekdayWakeTime,
 
@@ -21,10 +27,10 @@ public record RoutineRequest(
         @Schema(description = "주말 취침 시간", example = "02:00")
         LocalTime weekendSleepTime,
 
-        @Schema(description = "카페인 민감도 (LOW, NORMAL, HIGH)", example = "NORMAL")
+        @Schema(description = "카페인 민감도", example = "NORMAL")
         CaffeineSensitivity caffeineSensitivity,
 
-        @Schema(description = "카페인 섭취 빈도 (RARELY, SOMETIMES, OFTEN, DAILY)", example = "DAILY")
+        @Schema(description = "카페인 섭취 빈도", example = "OFTEN")
         IntakeFrequency intakeFrequency
 ) {
 }
