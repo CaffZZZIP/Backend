@@ -8,6 +8,9 @@ public record KakaoLoginResponse(
         @Schema(description = "JWT Access Token", example = "eyJhbGciOiJIUzI1NiJ9...")
         String accessToken,
 
+        @Schema(description = "JWT Refresh Token", example = "eyJhbGciOiJIUzI1NiJ9...")
+        String refreshToken,
+
         @Schema(description = "최초 로그인 여부", example = "true")
         Boolean isFirstLogin,
 

@@ -48,11 +48,13 @@ public class KakaoAuthService {
 
         User user = findOrCreateUser(userResponse);
 
-        String accessToken = jwtTokenProvider.generateToken(user);
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
         Boolean isFirstLogin = !user.isInitialSettingCompleted();
 
         return new KakaoLoginResponse(
                 accessToken,
+                refreshToken,
                 isFirstLogin,
                 user.getId(),
                 user.getNickname()

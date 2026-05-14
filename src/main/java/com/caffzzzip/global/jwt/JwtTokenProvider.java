@@ -27,11 +27,14 @@ public class JwtTokenProvider {
 
     private static final String AUTHORITIES_KEY = "auth";
 
-    @Value("${jwt.token.expire-time}")
-    private long tokenExpireTime;
-
     @Value("${jwt.secret}")
     private String secret;
+
+    @Value("${jwt.token.access-expire-time}")
+    private long accessTokenExpireTime;
+
+    @Value("${jwt.token.refresh-expire-time}")
+    private long refreshTokenExpireTime;
 
     private SecretKey key;
 
@@ -41,14 +44,27 @@ public class JwtTokenProvider {
         this.key = Keys.hmacShaKeyFor(keyBytes);
     }
 
-    // JWT 토큰 생성
-    public String generateToken(User user) {
+    // Access Token 생성
+    public String generateAccessToken(User user) {
         Date now = new Date();
-        Date expireDate = new Date(now.getTime() + tokenExpireTime);
+        Date expireDate = new Date(now.getTime() + accessTokenExpireTime);
 
         return Jwts.builder()
                 .setSubject(user.getId().toString())
-                .claim(AUTHORITIES_KEY, "ROLE_USER") // 기본 권한 설정
+                .claim(AUTHORITIES_KEY, "ROLE_USER")
+                .setIssuedAt(now)
+                .setExpiration(expireDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    // Refresh Token 생성
+    public String generateRefreshToken(User user) {
+        Date now = new Date();
+        Date expireDate = new Date(now.getTime() + refreshTokenExpireTime);
+
+        return Jwts.builder()
+                .setSubject(user.getId().toString())
                 .setIssuedAt(now)
                 .setExpiration(expireDate)
                 .signWith(key, SignatureAlgorithm.HS256)
@@ -62,21 +78,44 @@ public class JwtTokenProvider {
                     .setSigningKey(key)
                     .build()
                     .parseClaimsJws(token);
+
             return true;
+
         } catch (ExpiredJwtException e) {
-            throw new BusinessException(ErrorCode.INVALID_JWT, "JWT 토큰이 만료되었습니다.");
-        } catch (UnsupportedJwtException | MalformedJwtException | SignatureException | IllegalArgumentException e) {
-            throw new BusinessException(ErrorCode.INVALID_JWT, "유효하지 않은 JWT 토큰입니다.");
+            throw new BusinessException(
+                    ErrorCode.INVALID_JWT,
+                    "JWT 토큰이 만료되었습니다."
+            );
+
+        } catch (UnsupportedJwtException |
+                 MalformedJwtException |
+                 SignatureException |
+                 IllegalArgumentException e) {
+
+            throw new BusinessException(
+                    ErrorCode.INVALID_JWT,
+                    "유효하지 않은 JWT 토큰입니다."
+            );
         }
     }
 
+    // JWT에서 인증 정보 추출
     public Authentication getAuthentication(String token) {
         Claims claims = parseClaims(token);
-        List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
 
-        return new UsernamePasswordAuthenticationToken(claims.getSubject(), "", authorities);
+        List<GrantedAuthority> authorities =
+                Collections.singletonList(
+                        new SimpleGrantedAuthority("ROLE_USER")
+                );
+
+        return new UsernamePasswordAuthenticationToken(
+                claims.getSubject(),
+                "",
+                authorities
+        );
     }
 
+    // JWT Claims 추출
     private Claims parseClaims(String token) {
         try {
             return Jwts.parserBuilder()
@@ -84,6 +123,7 @@ public class JwtTokenProvider {
                     .build()
                     .parseClaimsJws(token)
                     .getBody();
+
         } catch (ExpiredJwtException e) {
             return e.getClaims();
         }
