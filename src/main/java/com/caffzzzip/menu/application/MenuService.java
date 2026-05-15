@@ -2,15 +2,23 @@ package com.caffzzzip.menu.application;
 
 import com.caffzzzip.common.error.ErrorCode;
 import com.caffzzzip.common.exception.BusinessException;
+import com.caffzzzip.intake.domain.IntakeLog;
+import com.caffzzzip.intake.domain.repository.IntakeLogRepository;
 import com.caffzzzip.menu.api.dto.BrandResponse;
 import com.caffzzzip.menu.api.dto.MenuDetailResponse;
 import com.caffzzzip.menu.api.dto.MenuResponse;
 import com.caffzzzip.menu.domain.Menu;
+import com.caffzzzip.menu.domain.RiskLevel;
 import com.caffzzzip.menu.domain.repository.MenuRepository;
+import com.caffzzzip.routine.domain.CaffeineSensitivity;
+import com.caffzzzip.routine.domain.Routine;
+import com.caffzzzip.routine.domain.RoutineType;
+import com.caffzzzip.routine.domain.repository.RoutineRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.*;
 import java.util.Comparator;
 import java.util.List;
 
@@ -19,7 +27,11 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MenuService {
 
+    private static final double CAFFEINE_HALF_LIFE_HOURS = 5.0;
+
     private final MenuRepository menuRepository;
+    private final IntakeLogRepository intakeLogRepository;
+    private final RoutineRepository routineRepository;
 
     public List<BrandResponse> getBrands() {
         return menuRepository.findByIsActiveTrue().stream()
@@ -78,20 +90,232 @@ public class MenuService {
                 .toList();
     }
 
-    public MenuDetailResponse getMenuDetail(Long menuId) {
-        Menu menu = menuRepository.findById(menuId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.VALIDATION_ERROR,
-                        "해당 메뉴를 찾을 수 없습니다."
-                ));
+    public MenuDetailResponse getMenuDetail(
+            Long userId,
+            Long menuId,
+            LocalDateTime intakeAt,
+            Integer quantity
+    ) {
+        Menu menu = findMenu(menuId);
+        Routine routine = findRoutine(userId);
+
+        LocalDateTime selectedIntakeAt = intakeAt != null
+                ? intakeAt
+                : LocalDateTime.now();
+
+        int selectedQuantity = quantity != null
+                ? quantity
+                : 1;
+
+        validateQuantity(selectedQuantity);
+
+        int intakeCaffeine = menu.getCaffeineMg() * selectedQuantity;
+
+        int todayTotalCaffeine = getTodayTotalCaffeine(userId, selectedIntakeAt.toLocalDate());
+
+        int expectedTotalCaffeine = todayTotalCaffeine + intakeCaffeine;
+
+        RiskLevel riskLevel = calculateRiskLevel(
+                expectedTotalCaffeine,
+                routine.getCaffeineSensitivity()
+        );
+
+        RoutineType routineType = getRoutineType(selectedIntakeAt);
+        LocalDateTime sleepDateTime = getSleepDateTime(selectedIntakeAt, routine, routineType);
+
+        int expectedRemainingCaffeine = calculateRemainingCaffeine(
+                intakeCaffeine,
+                selectedIntakeAt,
+                sleepDateTime
+        );
+
+        String guideMessage = createGuideMessage(
+                routine.getCaffeineSensitivity(),
+                selectedIntakeAt,
+                sleepDateTime,
+                expectedRemainingCaffeine
+        );
 
         return new MenuDetailResponse(
                 menu.getId(),
                 menu.getMenuName(),
                 menu.getBrand(),
                 menu.getCategory().getName(),
-                menu.getCaffeineMg()
+                menu.getCaffeineMg(),
+                selectedQuantity,
+                intakeCaffeine,
+                todayTotalCaffeine,
+                expectedTotalCaffeine,
+                riskLevel,
+                getRiskLabel(riskLevel),
+                routine.getCaffeineSensitivity(),
+                expectedRemainingCaffeine,
+                guideMessage
         );
+    }
+
+    private Menu findMenu(Long menuId) {
+        return menuRepository.findById(menuId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "해당 메뉴를 찾을 수 없습니다."
+                ));
+    }
+
+    private Routine findRoutine(Long userId) {
+        return routineRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "사용자 루틴 설정을 찾을 수 없습니다."
+                ));
+    }
+
+    private void validateQuantity(Integer quantity) {
+        if (quantity == null || quantity < 1) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "수량은 1개 이상이어야 합니다."
+            );
+        }
+    }
+
+    private int getTodayTotalCaffeine(Long userId, LocalDate date) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
+
+        return intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end)
+                .stream()
+                .mapToInt(IntakeLog::getTotalCaffeine)
+                .sum();
+    }
+
+    private RoutineType getRoutineType(LocalDateTime intakeAt) {
+        DayOfWeek dayOfWeek = intakeAt.getDayOfWeek();
+
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            return RoutineType.WEEKEND;
+        }
+
+        return RoutineType.WEEKDAY;
+    }
+
+    private LocalDateTime getSleepDateTime(
+            LocalDateTime intakeAt,
+            Routine routine,
+            RoutineType routineType
+    ) {
+        LocalTime sleepTime = routineType == RoutineType.WEEKEND
+                ? routine.getWeekendSleepTime()
+                : routine.getWeekdaySleepTime();
+
+        LocalDate sleepDate = intakeAt.toLocalDate();
+
+        if (sleepTime.isBefore(intakeAt.toLocalTime()) || sleepTime.equals(intakeAt.toLocalTime())) {
+            sleepDate = sleepDate.plusDays(1);
+        }
+
+        return LocalDateTime.of(sleepDate, sleepTime);
+    }
+
+    private int calculateRemainingCaffeine(
+            int caffeineMg,
+            LocalDateTime intakeAt,
+            LocalDateTime sleepDateTime
+    ) {
+        long minutes = Duration.between(intakeAt, sleepDateTime).toMinutes();
+
+        if (minutes <= 0) {
+            return caffeineMg;
+        }
+
+        double hours = minutes / 60.0;
+        double remaining = caffeineMg * Math.pow(0.5, hours / CAFFEINE_HALF_LIFE_HOURS);
+
+        return (int) Math.round(remaining);
+    }
+
+    private RiskLevel calculateRiskLevel(
+            int expectedTotalCaffeine,
+            CaffeineSensitivity sensitivity
+    ) {
+        return switch (sensitivity) {
+            case HIGH -> {
+                if (expectedTotalCaffeine <= 150) {
+                    yield RiskLevel.SAFE;
+                } else if (expectedTotalCaffeine <= 250) {
+                    yield RiskLevel.CAUTION;
+                } else {
+                    yield RiskLevel.DANGER;
+                }
+            }
+            case NORMAL -> {
+                if (expectedTotalCaffeine <= 300) {
+                    yield RiskLevel.SAFE;
+                } else if (expectedTotalCaffeine <= 400) {
+                    yield RiskLevel.CAUTION;
+                } else {
+                    yield RiskLevel.DANGER;
+                }
+            }
+            case LOW -> {
+                if (expectedTotalCaffeine <= 400) {
+                    yield RiskLevel.SAFE;
+                } else if (expectedTotalCaffeine <= 500) {
+                    yield RiskLevel.CAUTION;
+                } else {
+                    yield RiskLevel.DANGER;
+                }
+            }
+        };
+    }
+
+    private String getRiskLabel(RiskLevel riskLevel) {
+        return switch (riskLevel) {
+            case SAFE -> "안전";
+            case CAUTION -> "주의";
+            case DANGER -> "위험";
+        };
+    }
+
+    private String createGuideMessage(
+            CaffeineSensitivity sensitivity,
+            LocalDateTime intakeAt,
+            LocalDateTime sleepDateTime,
+            int expectedRemainingCaffeine
+    ) {
+        return String.format(
+                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 5시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 남아있어요.",
+                getSensitivityLabel(sensitivity),
+                formatTime(intakeAt.toLocalTime()),
+                formatTime(sleepDateTime.toLocalTime()),
+                expectedRemainingCaffeine
+        );
+    }
+
+    private String getSensitivityLabel(CaffeineSensitivity sensitivity) {
+        return switch (sensitivity) {
+            case LOW -> "낮음";
+            case NORMAL -> "보통";
+            case HIGH -> "높음";
+        };
+    }
+
+    private String formatTime(LocalTime time) {
+        int hour = time.getHour();
+        int minute = time.getMinute();
+
+        String period = hour < 12 ? "오전" : "오후";
+        int displayHour = hour % 12;
+
+        if (displayHour == 0) {
+            displayHour = 12;
+        }
+
+        if (minute == 0) {
+            return String.format("%s %d시", period, displayHour);
+        }
+
+        return String.format("%s %d시 %02d분", period, displayHour, minute);
     }
 
     private MenuResponse toMenuResponse(Menu menu) {

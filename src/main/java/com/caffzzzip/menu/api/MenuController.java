@@ -7,10 +7,13 @@ import com.caffzzzip.menu.api.dto.MenuDetailResponse;
 import com.caffzzzip.menu.api.dto.MenuResponse;
 import com.caffzzzip.menu.application.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -57,12 +60,27 @@ public class MenuController {
         return ApiResTemplate.successResponse(SuccessCode.GET_SUCCESS, response);
     }
 
-    @Operation(summary = "메뉴 상세 조회")
+    @Operation(
+            summary = "메뉴 상세 조회",
+            description = "메뉴 정보와 사용자 루틴, 오늘 섭취량을 기반으로 위험도와 예상 잔존 카페인을 계산합니다."
+    )
+    @SecurityRequirement(name = "JWT")
     @GetMapping("/{menuId}")
     public ApiResTemplate<MenuDetailResponse> getMenuDetail(
-            @PathVariable Long menuId
+            Authentication authentication,
+            @PathVariable Long menuId,
+            @RequestParam(required = false) LocalDateTime intakeAt,
+            @RequestParam(required = false) Integer quantity
     ) {
-        MenuDetailResponse response = menuService.getMenuDetail(menuId);
+        Long userId = Long.valueOf(authentication.getName());
+
+        MenuDetailResponse response = menuService.getMenuDetail(
+                userId,
+                menuId,
+                intakeAt,
+                quantity
+        );
+
         return ApiResTemplate.successResponse(SuccessCode.GET_SUCCESS, response);
     }
 }
