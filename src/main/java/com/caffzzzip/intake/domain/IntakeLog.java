@@ -62,4 +62,15 @@ public class IntakeLog {
         this.quantity = quantity;
         this.totalCaffeine = totalCaffeine;
     }
+
+    public void update(LocalDateTime intakeAt, Integer quantity, RoutineType routineType, Integer totalCaffeine) {
+        this.intakeAt = intakeAt;
+        this.quantity = quantity;
+        this.routineType = routineType;
+        this.totalCaffeine = totalCaffeine;
+    }
+
+    public boolean isOwner(Long userId) {
+        return this.user.getId().equals(userId);
+    }
 }
