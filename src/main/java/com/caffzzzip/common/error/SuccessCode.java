@@ -16,6 +16,8 @@ public enum SuccessCode {
     LIKE_DELETE_SUCCESS(HttpStatus.OK, "좋아요가 성공적으로 삭제되었습니다."),
     COMMENT_DELETE_SUCCESS(HttpStatus.OK, "댓글이 성공적으로 삭제되었습니다."),
     UPDATE_SUCCESS(HttpStatus.OK, "성공적으로 수정되었습니다."),
+    INTAKE_DELETE_SUCCESS(HttpStatus.OK, "섭취 기록이 성공적으로 삭제되었습니다."),
+    FAVORITE_DELETE_SUCCESS(HttpStatus.OK, "즐겨찾기가 성공적으로 해제되었습니다."),
 
     // 201 CREATED
     EMAIL_SEND_SUCCESS(HttpStatus.CREATED, "이메일 전송에 성공하였습니다."),
