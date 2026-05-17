@@ -34,6 +34,9 @@ public record MenuDetailResponse(
         @Schema(description = "이번 메뉴까지 포함한 예상 총 카페인 섭취량", example = "350")
         Integer expectedTotalCaffeine,
 
+        @Schema(description = "하루 권장 카페인 기준량", example = "400")
+        Integer dailyRecommendedLimit,
+
         @Schema(description = "위험도", example = "CAUTION")
         RiskLevel riskLevel,
 

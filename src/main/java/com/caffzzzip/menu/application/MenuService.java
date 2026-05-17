@@ -28,6 +28,7 @@ import java.util.List;
 public class MenuService {
 
     private static final double CAFFEINE_HALF_LIFE_HOURS = 5.0;
+    private static final int DAILY_RECOMMENDED_LIMIT = 400;
 
     private final MenuRepository menuRepository;
     private final IntakeLogRepository intakeLogRepository;
@@ -111,7 +112,10 @@ public class MenuService {
 
         int intakeCaffeine = menu.getCaffeineMg() * selectedQuantity;
 
-        int todayTotalCaffeine = getTodayTotalCaffeine(userId, selectedIntakeAt.toLocalDate());
+        int todayTotalCaffeine = getTodayTotalCaffeine(
+                userId,
+                selectedIntakeAt.toLocalDate()
+        );
 
         int expectedTotalCaffeine = todayTotalCaffeine + intakeCaffeine;
 
@@ -121,19 +125,28 @@ public class MenuService {
         );
 
         RoutineType routineType = getRoutineType(selectedIntakeAt);
-        LocalDateTime sleepDateTime = getSleepDateTime(selectedIntakeAt, routine, routineType);
 
-        int expectedRemainingCaffeine = calculateRemainingCaffeine(
-                intakeCaffeine,
+        LocalDateTime sleepDateTime = getSleepDateTime(
                 selectedIntakeAt,
-                sleepDateTime
+                routine,
+                routineType
+        );
+
+        int expectedRemainingCaffeine = calculateExpectedRemainingCaffeine(
+                userId,
+                selectedIntakeAt.toLocalDate(),
+                sleepDateTime,
+                intakeCaffeine,
+                selectedIntakeAt
         );
 
         String guideMessage = createGuideMessage(
                 routine.getCaffeineSensitivity(),
                 selectedIntakeAt,
                 sleepDateTime,
-                expectedRemainingCaffeine
+                expectedRemainingCaffeine,
+                expectedTotalCaffeine,
+                riskLevel
         );
 
         return new MenuDetailResponse(
@@ -146,6 +159,7 @@ public class MenuService {
                 intakeCaffeine,
                 todayTotalCaffeine,
                 expectedTotalCaffeine,
+                DAILY_RECOMMENDED_LIMIT,
                 riskLevel,
                 getRiskLabel(riskLevel),
                 routine.getCaffeineSensitivity(),
@@ -187,6 +201,34 @@ public class MenuService {
                 .stream()
                 .mapToInt(IntakeLog::getTotalCaffeine)
                 .sum();
+    }
+
+    private int calculateExpectedRemainingCaffeine(
+            Long userId,
+            LocalDate date,
+            LocalDateTime sleepDateTime,
+            int newIntakeCaffeine,
+            LocalDateTime newIntakeAt
+    ) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
+
+        int existingRemainingCaffeine = intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end)
+                .stream()
+                .mapToInt(intakeLog -> calculateRemainingCaffeine(
+                        intakeLog.getTotalCaffeine(),
+                        intakeLog.getIntakeAt(),
+                        sleepDateTime
+                ))
+                .sum();
+
+        int newRemainingCaffeine = calculateRemainingCaffeine(
+                newIntakeCaffeine,
+                newIntakeAt,
+                sleepDateTime
+        );
+
+        return existingRemainingCaffeine + newRemainingCaffeine;
     }
 
     private RoutineType getRoutineType(LocalDateTime intakeAt) {
@@ -251,14 +293,14 @@ public class MenuService {
             case NORMAL -> {
                 if (expectedTotalCaffeine <= 300) {
                     yield RiskLevel.SAFE;
-                } else if (expectedTotalCaffeine <= 400) {
+                } else if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) {
                     yield RiskLevel.CAUTION;
                 } else {
                     yield RiskLevel.DANGER;
                 }
             }
             case LOW -> {
-                if (expectedTotalCaffeine <= 400) {
+                if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) {
                     yield RiskLevel.SAFE;
                 } else if (expectedTotalCaffeine <= 500) {
                     yield RiskLevel.CAUTION;
@@ -281,15 +323,29 @@ public class MenuService {
             CaffeineSensitivity sensitivity,
             LocalDateTime intakeAt,
             LocalDateTime sleepDateTime,
-            int expectedRemainingCaffeine
+            int expectedRemainingCaffeine,
+            int expectedTotalCaffeine,
+            RiskLevel riskLevel
     ) {
-        return String.format(
-                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 5시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 남아있어요.",
+        String baseMessage = String.format(
+                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 5시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 정도 남아있어요.",
                 getSensitivityLabel(sensitivity),
                 formatTime(intakeAt.toLocalTime()),
                 formatTime(sleepDateTime.toLocalTime()),
                 expectedRemainingCaffeine
         );
+
+        if (riskLevel == RiskLevel.DANGER || expectedTotalCaffeine > DAILY_RECOMMENDED_LIMIT) {
+            return baseMessage + " 오늘 예상 총 카페인 섭취량이 " + expectedTotalCaffeine
+                    + "mg으로 하루 권장량을 넘을 수 있어요. 잠깐 카페인을 쉬는 게 좋을 것 같아요!";
+        }
+
+        if (riskLevel == RiskLevel.CAUTION) {
+            return baseMessage + " 오늘 예상 총 카페인 섭취량이 " + expectedTotalCaffeine
+                    + "mg이에요. 늦은 시간 추가 섭취는 조금 주의해주세요.";
+        }
+
+        return baseMessage;
     }
 
     private String getSensitivityLabel(CaffeineSensitivity sensitivity) {
