@@ -5,4 +5,4 @@ public enum IntakeFrequency {
     SOMETIMES,
     OFTEN,
     DAILY
-}
+} //거의x 종종 자주 거의매일
