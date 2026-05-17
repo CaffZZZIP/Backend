@@ -2,10 +2,10 @@ HELP.md
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+!/src/main//build/
+!/src/test//build/
 
-### STS ###
+STS
 .apt_generated
 .classpath
 .factorypath
@@ -14,47 +14,47 @@ build/
 .springBeans
 .sts4-cache
 bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
+!/src/main//bin/
+!/src/test//bin/
 
-### IntelliJ IDEA ###
+IntelliJ IDEA
 .idea
 *.iws
 *.iml
 *.ipr
 out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+!/src/main//out/
+!/src/test//out/
 
-### NetBeans ###
+NetBeans
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
 
-### VS Code ###
+VS Code
 .vscode/
 
-### yml ###
+yml
 src/main/resources/application.yml
 
 .env
 
-### Logs ###
-*.log
+Logs
+.log
 logs/
 
-### OS ###
+OS
 .DS_Store
 Thumbs.db
 
-### Docker / local env ###
+Docker / local env
 docker-compose.override.yml
-.env.*
+.env.
 !.env.example
 
-### Security / secrets ###
+Security / secrets
 *.pem
 *.key
 *.p12

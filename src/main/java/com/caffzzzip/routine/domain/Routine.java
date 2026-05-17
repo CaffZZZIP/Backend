@@ -78,5 +78,8 @@ public class Routine {
         this.weekendSleepTime = weekendSleepTime;
         this.caffeineSensitivity = caffeineSensitivity;
         this.intakeFrequency = intakeFrequency;
+
+
     }
-}
+
+} //평일루틴 네임명 참고
