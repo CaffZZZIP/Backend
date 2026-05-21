@@ -2,7 +2,10 @@ package com.caffzzzip.kakao.api;
 
 import com.caffzzzip.kakao.api.dto.KakaoLoginResponse;
 import com.caffzzzip.kakao.application.KakaoAuthService;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,8 +31,15 @@ public class KakaoAuthController {
             summary = "카카오 로그인",
             description = "인가 코드를 받아 카카오 로그인 후 JWT를 발급하고 프론트엔드로 리다이렉트합니다."
     )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "302",
+                    description = "카카오 로그인 성공 후 프론트엔드 callback 주소로 리다이렉트"
+            )
+    })
     @GetMapping("/api/auth/kakao/callback")
     public RedirectView kakaoCallback(@RequestParam String code) {
+
         KakaoLoginResponse response = kakaoAuthService.login(code);
 
         String redirectUrl = frontendRedirectUri
