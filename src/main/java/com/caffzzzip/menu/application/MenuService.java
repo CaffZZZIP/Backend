@@ -39,8 +39,22 @@ public class MenuService {
                 .map(Menu::getBrand)
                 .distinct()
                 .sorted()
-                .map(BrandResponse::new)
+                .map(brand -> new BrandResponse(
+                        brand,
+                        getBrandLogoUrl(brand)
+                ))
                 .toList();
+    }
+
+    private String getBrandLogoUrl(String brand) {
+        return switch (brand) {
+            case "스타벅스" -> "/images/brands/starbucks.png";
+            case "이디야" -> "/images/brands/ediya.png";
+            case "할리스" -> "/images/brands/hollys.png";
+            case "메가커피" -> "/images/brands/mega-coffee.png";
+            case "빽다방" -> "/images/brands/paikdabang.png";
+            default -> "/images/brands/default.png";
+        };
     }
 
     public List<MenuResponse> getMenusByCategory(Long categoryId) {
