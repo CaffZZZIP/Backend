@@ -328,7 +328,7 @@ public class MenuService {
             RiskLevel riskLevel
     ) {
         String baseMessage = String.format(
-                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 5시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 정도 남아있어요.",
+                "민감도 %s 기준으로, %s에 마시면 %s 무렵에는 약 %dmg 정도 남아있을 거예요.",
                 getSensitivityLabel(sensitivity),
                 formatTime(intakeAt.toLocalTime()),
                 formatTime(sleepDateTime.toLocalTime()),

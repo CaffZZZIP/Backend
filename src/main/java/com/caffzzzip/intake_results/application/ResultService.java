@@ -82,7 +82,15 @@ public class ResultService {
         int totalIntake = 0;
         double remainingCaffeine = 0;
 
-        LocalDateTime now = LocalDateTime.now();
+        //LocalDateTime now = LocalDateTime.now();
+
+        LocalDateTime now =
+                LocalDateTime.of(
+                        LocalDate.now(),
+                        todayType == RoutineType.WEEKEND
+                                ? routine.getWeekendSleepTime()
+                                : routine.getWeekdaySleepTime()
+                );
 
         for (ResultItem log : logs) {
 
