@@ -27,7 +27,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MenuService {
 
-    private static final double CAFFEINE_HALF_LIFE_HOURS = 5.0;
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
     private static final int DAILY_RECOMMENDED_LIMIT = 400;
 
     private final MenuRepository menuRepository;
@@ -58,10 +58,9 @@ public class MenuService {
     }
 
     public List<MenuResponse> getMenusByCategory(Long categoryId) {
-        return menuRepository.findByCategoryIdAndIsActiveTrue(categoryId).stream()
-                .sorted(Comparator.comparing(Menu::getMenuName))
-                .map(this::toMenuResponse)
-                .toList();
+        List<Menu> menus = menuRepository.findByCategoryIdAndIsActiveTrue(categoryId);
+
+        return sortAndConvertToMenuResponses(menus);
     }
 
     public List<MenuResponse> getMenus(String brand, Long categoryId) {
@@ -77,10 +76,7 @@ public class MenuService {
             menus = menuRepository.findByIsActiveTrue();
         }
 
-        return menus.stream()
-                .sorted(Comparator.comparing(Menu::getMenuName))
-                .map(this::toMenuResponse)
-                .toList();
+        return sortAndConvertToMenuResponses(menus);
     }
 
     public List<MenuResponse> searchMenus(String keyword, String brand) {
@@ -99,10 +95,7 @@ public class MenuService {
             menus = menuRepository.findByMenuNameContainingAndIsActiveTrue(keyword);
         }
 
-        return menus.stream()
-                .sorted(Comparator.comparing(Menu::getMenuName))
-                .map(this::toMenuResponse)
-                .toList();
+        return sortAndConvertToMenuResponses(menus);
     }
 
     public MenuDetailResponse getMenuDetail(
@@ -116,7 +109,7 @@ public class MenuService {
 
         LocalDateTime selectedIntakeAt = intakeAt != null
                 ? intakeAt
-                : LocalDateTime.now();
+                : LocalDateTime.now(KOREA_ZONE_ID);
 
         int selectedQuantity = quantity != null
                 ? quantity
@@ -146,12 +139,15 @@ public class MenuService {
                 routineType
         );
 
+        double halfLifeHours = getHalfLifeHours(routine.getCaffeineSensitivity());
+
         int expectedRemainingCaffeine = calculateExpectedRemainingCaffeine(
                 userId,
                 selectedIntakeAt.toLocalDate(),
                 sleepDateTime,
                 intakeCaffeine,
-                selectedIntakeAt
+                selectedIntakeAt,
+                halfLifeHours
         );
 
         String guideMessage = createGuideMessage(
@@ -160,7 +156,8 @@ public class MenuService {
                 sleepDateTime,
                 expectedRemainingCaffeine,
                 expectedTotalCaffeine,
-                riskLevel
+                riskLevel,
+                halfLifeHours
         );
 
         return new MenuDetailResponse(
@@ -222,7 +219,8 @@ public class MenuService {
             LocalDate date,
             LocalDateTime sleepDateTime,
             int newIntakeCaffeine,
-            LocalDateTime newIntakeAt
+            LocalDateTime newIntakeAt,
+            double halfLifeHours
     ) {
         LocalDateTime start = date.atStartOfDay();
         LocalDateTime end = date.plusDays(1).atStartOfDay();
@@ -232,14 +230,16 @@ public class MenuService {
                 .mapToInt(intakeLog -> calculateRemainingCaffeine(
                         intakeLog.getTotalCaffeine(),
                         intakeLog.getIntakeAt(),
-                        sleepDateTime
+                        sleepDateTime,
+                        halfLifeHours
                 ))
                 .sum();
 
         int newRemainingCaffeine = calculateRemainingCaffeine(
                 newIntakeCaffeine,
                 newIntakeAt,
-                sleepDateTime
+                sleepDateTime,
+                halfLifeHours
         );
 
         return existingRemainingCaffeine + newRemainingCaffeine;
@@ -276,7 +276,8 @@ public class MenuService {
     private int calculateRemainingCaffeine(
             int caffeineMg,
             LocalDateTime intakeAt,
-            LocalDateTime sleepDateTime
+            LocalDateTime sleepDateTime,
+            double halfLifeHours
     ) {
         long minutes = Duration.between(intakeAt, sleepDateTime).toMinutes();
 
@@ -285,9 +286,17 @@ public class MenuService {
         }
 
         double hours = minutes / 60.0;
-        double remaining = caffeineMg * Math.pow(0.5, hours / CAFFEINE_HALF_LIFE_HOURS);
+        double remaining = caffeineMg * Math.pow(0.5, hours / halfLifeHours);
 
         return (int) Math.round(remaining);
+    }
+
+    private double getHalfLifeHours(CaffeineSensitivity sensitivity) {
+        return switch (sensitivity) {
+            case LOW -> 4.0;
+            case NORMAL -> 5.0;
+            case HIGH -> 6.0;
+        };
     }
 
     private RiskLevel calculateRiskLevel(
@@ -339,11 +348,13 @@ public class MenuService {
             LocalDateTime sleepDateTime,
             int expectedRemainingCaffeine,
             int expectedTotalCaffeine,
-            RiskLevel riskLevel
+            RiskLevel riskLevel,
+            double halfLifeHours
     ) {
         String baseMessage = String.format(
-                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 5시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 정도 남아있어요.",
+                "민감도 %s 기준, 이 음료의 카페인 반감기는 약 %.0f시간이에요. %s에 마시면 %s 무렵에는 약 %dmg 정도 남아있어요.",
                 getSensitivityLabel(sensitivity),
+                halfLifeHours,
                 formatTime(intakeAt.toLocalTime()),
                 formatTime(sleepDateTime.toLocalTime()),
                 expectedRemainingCaffeine
@@ -386,6 +397,16 @@ public class MenuService {
         }
 
         return String.format("%s %d시 %02d분", period, displayHour, minute);
+    }
+
+    private List<MenuResponse> sortAndConvertToMenuResponses(List<Menu> menus) {
+        return menus.stream()
+                .sorted(
+                        Comparator.comparing((Menu menu) -> menu.getCategory().getId())
+                                .thenComparing(Menu::getMenuName)
+                )
+                .map(this::toMenuResponse)
+                .toList();
     }
 
     private MenuResponse toMenuResponse(Menu menu) {
