@@ -14,12 +14,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,16 +31,26 @@ public class MainService {
     private final IntakeLogRepository intakeLogRepository;
     private final ResultService resultService;
 
-    // 오늘 사용자가 선택한 루틴 모드 임시 저장 (서버 재시작 시 초기화)
+    // 한국 시간
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    // 하루 권장 최대 카페인량
+    private static final int DAILY_SAFE_LIMIT = 400;
+
+    // 오늘 사용자가 선택한 루틴 모드  저장
+
     private final Map<Long, RoutineType> todayRoutineModeCache = new ConcurrentHashMap<>();
-
-
 
     public MainRoutineResponse getRoutineInfo(Long userId) {
         Routine routine = findRoutine(userId);
 
-        // 사용자가 오늘 선택한 모드가 있으면 우선 적용, 없으면 자동 판단
-        RoutineType todayType = todayRoutineModeCache.getOrDefault(userId, getTodayRoutineType());
+        // 사용자가 오늘 선택한 모드가 있으면 우선 적용
+        // 없으면 자동 판단
+        RoutineType todayType =
+                todayRoutineModeCache.getOrDefault(
+                        userId,
+                        getTodayRoutineType()
+                );
 
         return buildRoutineResponse(routine, todayType);
     }
@@ -54,9 +63,14 @@ public class MainService {
     public MainCaffeineSummaryResponse getCaffeineSummary(Long userId) {
         DailyReportResponse report = resultService.getTodayReport(userId);
 
+        // 남은 여유 섭취량
+        int remainingSafeAmount =
+                Math.max(0, DAILY_SAFE_LIMIT - report.getTotalCaffeine());
+
         return MainCaffeineSummaryResponse.builder()
                 .totalCaffeine(report.getTotalCaffeine())
                 .remainingCaffeine(report.getRemainingCaffeine())
+                .remainingSafeAmount(remainingSafeAmount)
                 .riskLevel(report.getRiskLevel())
                 .sleepImpactLevel(report.getSleepImpactLevel())
                 .build();
@@ -67,29 +81,46 @@ public class MainService {
         List<MainIntakeItem> intakePreview = getIntakePreview(userId);
 
         return MainDailyQuoteResponse.builder()
-                .message(createSummaryMessage(report.getRemainingCaffeine(), intakePreview))
+                .message(createSummaryMessage(
+                        report.getRemainingCaffeine(),
+                        intakePreview
+                ))
                 .build();
     }
 
     public List<MainIntakeItem> getIntakePreview(Long userId) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime start = today.atStartOfDay();
-        LocalDateTime end = today.plusDays(1).atStartOfDay();
+        LocalDate today = getTodayKst();
 
-        return intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end)
+        LocalDateTime start =
+                today.atStartOfDay(KST).toLocalDateTime();
+
+        LocalDateTime end =
+                today.plusDays(1)
+                        .atStartOfDay(KST)
+                        .toLocalDateTime();
+
+        return intakeLogRepository
+                .findByUserIdAndIntakeAtBetween(userId, start, end)
                 .stream()
                 .sorted(Comparator.comparing(IntakeLog::getIntakeAt).reversed())
                 .map(log -> MainIntakeItem.builder()
                         .menuName(log.getMenu().getMenuName())
+                        .brand(log.getMenu().getBrand())
                         .caffeineMg(log.getTotalCaffeine())
-                        .intakeTime(formatTime(log.getIntakeAt().toLocalTime()))
+                        .intakeTime(
+                                formatTime(log.getIntakeAt().toLocalTime())
+                        )
                         .build())
                 .toList();
     }
 
 
 
-    private MainRoutineResponse buildRoutineResponse(Routine routine, RoutineType type) {
+    private MainRoutineResponse buildRoutineResponse(
+            Routine routine,
+            RoutineType type
+    ) {
+
         String routineName = type == RoutineType.WEEKDAY
                 ? routine.getWeekdayRoutineName()
                 : routine.getWeekendRoutineName();
@@ -117,14 +148,25 @@ public class MainService {
                 ));
     }
 
+    private LocalDate getTodayKst() {
+        return ZonedDateTime.now(KST).toLocalDate();
+    }
+
+
     private RoutineType getTodayRoutineType() {
-        DayOfWeek day = LocalDate.now().getDayOfWeek();
-        return (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)
+        DayOfWeek day = getTodayKst().getDayOfWeek();
+
+        return (day == DayOfWeek.SATURDAY
+                || day == DayOfWeek.SUNDAY)
                 ? RoutineType.WEEKEND
                 : RoutineType.WEEKDAY;
     }
 
-    private String createSummaryMessage(int remainingCaffeine, List<MainIntakeItem> intakeList) {
+    private String createSummaryMessage(
+            int remainingCaffeine,
+            List<MainIntakeItem> intakeList
+    ) {
+
         if (intakeList.isEmpty()) {
             return "오늘은 아직 카페인을 섭취하지 않았어요.";
         }
@@ -132,9 +174,12 @@ public class MainService {
         boolean isLateIntake = intakeList.stream()
                 .anyMatch(item -> {
                     String time = item.getIntakeTime();
-                    return time.contains("오후 7") || time.contains("오후 8") ||
-                            time.contains("오후 9") || time.contains("오후 10") ||
-                            time.contains("오후 11");
+
+                    return time.contains("오후 7")
+                            || time.contains("오후 8")
+                            || time.contains("오후 9")
+                            || time.contains("오후 10")
+                            || time.contains("오후 11");
                 });
 
         if (isLateIntake) {
@@ -144,6 +189,7 @@ public class MainService {
         if (remainingCaffeine >= 150) {
             return "현재 체내 카페인이 높아 수면에 영향을 줄 가능성이 있어요.";
         }
+
         if (remainingCaffeine >= 70) {
             return "현재 잔존 카페인이 남아있어요. 취침 전에 주의하세요.";
         }
@@ -151,15 +197,17 @@ public class MainService {
         return "오늘은 비교적 안정적인 카페인 섭취 상태예요.";
     }
 
+
     private String formatTime(LocalTime time) {
-        if (time == null) return "00:00";
+        if (time == null) {
+            return "00:00";
+        }
 
-        int hour = time.getHour();
-        int minute = time.getMinute();
-        String period = hour < 12 ? "오전" : "오후";
-        int displayHour = hour % 12;
-        if (displayHour == 0) displayHour = 12;
-
-        return String.format("%s %02d:%02d", period, displayHour, minute);
+        return time.format(
+                DateTimeFormatter.ofPattern(
+                        "a hh:mm",
+                        Locale.KOREAN
+                )
+        );
     }
 }

@@ -13,6 +13,9 @@ public class MainCaffeineSummaryResponse {
     // 현재 잔존 카페인
     private int remainingCaffeine;
 
+    // 남은 여유 섭취량
+    private int remainingSafeAmount;
+
     // 위험도
     private String riskLevel;
 
