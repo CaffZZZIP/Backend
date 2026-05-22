@@ -11,46 +11,49 @@ import com.caffzzzip.routine.domain.repository.RoutineRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ResultService {
 
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
+
     private final IntakeLogRepository intakeLogRepository;
     private final RoutineRepository routineRepository;
 
     public DailyReportResponse getTodayReport(Long userId) {
 
-        // 사용자 루틴 조회
         Routine routine = routineRepository.findByUserId(userId)
                 .orElseThrow(() ->
                         new IllegalArgumentException("루틴 정보가 없습니다.")
                 );
 
-        // 평일 / 주말 판별
+        LocalDate today = LocalDate.now(KOREA_ZONE_ID);
+        LocalDateTime now = LocalDateTime.now(KOREA_ZONE_ID);
+
         RoutineType todayType =
-                (LocalDate.now().getDayOfWeek().getValue() >= 6)
+                (today.getDayOfWeek().getValue() >= 6)
                         ? RoutineType.WEEKEND
                         : RoutineType.WEEKDAY;
 
-        // 루틴별 취침시간
-        String sleepTime =
+        LocalTime sleepLocalTime =
                 todayType == RoutineType.WEEKEND
-                        ? routine.getWeekendSleepTime().toString()
-                        : routine.getWeekdaySleepTime().toString();
+                        ? routine.getWeekendSleepTime()
+                        : routine.getWeekdaySleepTime();
 
-        // 오늘 시작 ~ 내일 시작
-        LocalDateTime start =
-                LocalDate.now().atStartOfDay();
+        String sleepTime = sleepLocalTime.toString();
 
-        LocalDateTime end =
-                LocalDate.now().plusDays(1).atStartOfDay();
+        LocalDateTime sleepDateTime = LocalDateTime.of(today, sleepLocalTime);
 
-        // 오늘 섭취 기록 조회
+        if (sleepDateTime.isBefore(now) || sleepDateTime.isEqual(now)) {
+            sleepDateTime = sleepDateTime.plusDays(1);
+        }
+
+        LocalDateTime start = today.atStartOfDay();
+        LocalDateTime end = today.plusDays(1).atStartOfDay();
+
         List<IntakeLog> intakeLogs =
                 intakeLogRepository.findByUserIdAndIntakeAtBetween(
                         userId,
@@ -58,7 +61,6 @@ public class ResultService {
                         end
                 );
 
-        // 응답 리스트 변환
         List<ResultItem> logs = intakeLogs.stream()
                 .map(log -> ResultItem.builder()
                         .menuId(log.getMenu().getId())
@@ -70,103 +72,107 @@ public class ResultService {
                         .build())
                 .toList();
 
-        // 민감도 기반 반감기 계산
-        double sensitivityWeight =
-                getSensitivityWeight(
-                        routine.getCaffeineSensitivity()
-                );
-
-        double halfLifeMinutes =
-                300.0 * sensitivityWeight;
+        double halfLifeHours = getHalfLifeHours(
+                routine.getCaffeineSensitivity()
+        );
 
         int totalIntake = 0;
-        double remainingCaffeine = 0;
-
-        LocalDateTime now = LocalDateTime.now();
+        double currentRemainingCaffeine = 0;
+        double bedtimeRemainingCaffeine = 0;
 
         for (ResultItem log : logs) {
-
             totalIntake += log.getCaffeineMg();
 
             LocalDateTime intakeTime =
                     LocalDateTime.parse(log.getIntakeAt());
 
-            long minutesElapsed =
-                    Duration.between(intakeTime, now).toMinutes();
+            currentRemainingCaffeine += calculateRemainingCaffeine(
+                    log.getCaffeineMg(),
+                    intakeTime,
+                    now,
+                    halfLifeHours
+            );
 
-            if (minutesElapsed > 0) {
-
-                double remaining =
-                        log.getCaffeineMg()
-                                * Math.pow(
-                                0.5,
-                                (double) minutesElapsed / halfLifeMinutes
-                        );
-
-                remainingCaffeine += remaining;
-
-            } else {
-
-                remainingCaffeine += log.getCaffeineMg();
-            }
+            bedtimeRemainingCaffeine += calculateRemainingCaffeine(
+                    log.getCaffeineMg(),
+                    intakeTime,
+                    sleepDateTime,
+                    halfLifeHours
+            );
         }
 
-        // 잔존 카페인 반올림
-        int roundedRemaining =
-                (int) Math.round(remainingCaffeine);
+        int roundedCurrentRemaining =
+                (int) Math.round(currentRemainingCaffeine);
 
-        // 위험도 계산
+        int roundedBedtimeRemaining =
+                (int) Math.round(bedtimeRemainingCaffeine);
+
         String riskLevel =
                 calculateRiskLevel(
                         totalIntake,
                         routine.getCaffeineSensitivity()
                 );
 
-        // 분석 메시지
+        String sleepImpactLevel =
+                calculateSleepImpactLevel(roundedBedtimeRemaining);
+
         String message =
                 generateAnalysisMessage(
                         logs,
-                        remainingCaffeine,
-                        sleepTime
+                        roundedCurrentRemaining,
+                        roundedBedtimeRemaining,
+                        sleepTime,
+                        sleepImpactLevel
                 );
 
-        // 최종 응답 반환
         return DailyReportResponse.builder()
                 .totalCaffeine(totalIntake)
-                .remainingCaffeine(roundedRemaining)
+                .remainingCaffeine(roundedCurrentRemaining)
+                .bedtimeRemainingCaffeine(roundedBedtimeRemaining)
                 .riskLevel(riskLevel)
                 .recommendedSleepTime(sleepTime)
-                .sleepImpactLevel(
-                        remainingCaffeine >= 50
-                                ? "HIGH"
-                                : "LOW"
-                )
+                .sleepImpactLevel(sleepImpactLevel)
                 .analysisMessage(message)
                 .intakeList(logs)
                 .build();
     }
 
-    // 민감도별 반감기 가중치
-    private double getSensitivityWeight(
+    private double calculateRemainingCaffeine(
+            int caffeineMg,
+            LocalDateTime intakeTime,
+            LocalDateTime targetTime,
+            double halfLifeHours
+    ) {
+        long minutesElapsed =
+                Duration.between(intakeTime, targetTime).toMinutes();
+
+        if (minutesElapsed <= 0) {
+            return caffeineMg;
+        }
+
+        double hoursElapsed = minutesElapsed / 60.0;
+
+        return caffeineMg * Math.pow(
+                0.5,
+                hoursElapsed / halfLifeHours
+        );
+    }
+
+    private double getHalfLifeHours(
             CaffeineSensitivity sensitivity
     ) {
-
         return switch (sensitivity) {
-
-            case HIGH -> 1.5;
-            case LOW -> 0.7;
-            default -> 1.0;
+            case LOW -> 4.0;
+            case NORMAL -> 5.0;
+            case HIGH -> 6.0;
         };
     }
 
-    // 위험도 계산
     private String calculateRiskLevel(
             int total,
             CaffeineSensitivity sensitivity
     ) {
-
         return switch (sensitivity) {
-
             case HIGH -> {
                 if (total <= 150) {
                     yield "SAFE";
@@ -199,32 +205,53 @@ public class ResultService {
         };
     }
 
-    // 분석 메시지
+    private String calculateSleepImpactLevel(
+            int bedtimeRemainingCaffeine
+    ) {
+        if (bedtimeRemainingCaffeine >= 100) {
+            return "HIGH";
+        }
+
+        if (bedtimeRemainingCaffeine >= 50) {
+            return "MID";
+        }
+
+        return "LOW";
+    }
+
     private String generateAnalysisMessage(
             List<ResultItem> logs,
-            double remainingCaffeine,
-            String sleepTime
+            int currentRemaining,
+            int bedtimeRemaining,
+            String sleepTime,
+            String sleepImpactLevel
     ) {
-
         if (logs.isEmpty()) {
             return "오늘은 카페인을 섭취하지 않았어요.";
         }
 
-        if (remainingCaffeine >= 100) {
-
+        if ("HIGH".equals(sleepImpactLevel)) {
             return String.format(
-                    "잔존량 %dmg은 취침 시간인 %s까지 해소되기 어렵습니다.",
-                    (int) Math.round(remainingCaffeine),
-                    sleepTime
-            );
-
-        } else {
-
-            return String.format(
-                    "현재 잔존 카페인이 %dmg이라 %s까지는 해소될 거예요.",
-                    (int) Math.round(remainingCaffeine),
-                    sleepTime
+                    "현재 잔존 카페인은 약 %dmg이고, 취침 시간인 %s에도 약 %dmg 정도 남아있을 수 있어요. 수면에 영향을 줄 가능성이 높아요.",
+                    currentRemaining,
+                    sleepTime,
+                    bedtimeRemaining
             );
         }
+
+        if ("MID".equals(sleepImpactLevel)) {
+            return String.format(
+                    "현재 잔존 카페인은 약 %dmg이고, 취침 시간인 %s에는 약 %dmg 정도 남아있을 수 있어요. 늦은 시간 추가 섭취는 주의해주세요.",
+                    currentRemaining,
+                    sleepTime,
+                    bedtimeRemaining
+            );
+        }
+
+        return String.format(
+                "현재 잔존 카페인은 약 %dmg이고, 취침 시간인 %s에는 대부분 해소될 것으로 예상돼요.",
+                currentRemaining,
+                sleepTime
+        );
     }
 }
