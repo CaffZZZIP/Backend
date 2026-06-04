@@ -53,6 +53,14 @@ public class MenuService {
             case "할리스" -> "/images/brands/hollys.png";
             case "메가커피" -> "/images/brands/mega-coffee.png";
             case "빽다방" -> "/images/brands/paikdabang.png";
+
+            case "더벤티" -> "/images/brands/theventi.png";
+            case "에너지드링크" -> "/images/brands/energy-drink.png";
+            case "커피빈" -> "/images/brands/coffeebean.png";
+            case "폴바셋" -> "/images/brands/paulbassett.png";
+            case "투썸플레이스" -> "/images/brands/twosomeplace.png";
+            case "탐앤탐스" -> "/images/brands/tomntoms.png";
+
             default -> "/images/brands/default.png";
         };
     }
