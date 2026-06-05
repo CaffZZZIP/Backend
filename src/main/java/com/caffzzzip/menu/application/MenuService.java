@@ -50,7 +50,9 @@ public class MenuService {
     }
 
     private String getBrandLogoUrl(String brand) {
-        return switch (brand) {
+        String normalizedBrand = brand == null ? "" : brand.trim();
+
+        return switch (normalizedBrand) {
             case "스타벅스" -> "/images/brands/starbucks.png";
             case "이디야" -> "/images/brands/ediya.png";
             case "할리스" -> "/images/brands/hollys.png";
