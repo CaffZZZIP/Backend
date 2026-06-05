@@ -47,7 +47,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/",
                                 "/error",
-                                "/favicon.ico"
+                                "/favicon.ico",
+                                "/images/**"
                         ).permitAll()
 
                         // 인증 API 허용
