@@ -24,9 +24,6 @@ public class Routine {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(nullable = false, length = 50)
-    private String restDays;
-
     // 평일 루틴 이름
     @Column(nullable = false, length = 50)
     private String weekdayRoutineName;
@@ -64,7 +61,6 @@ public class Routine {
     @Builder
     public Routine(User user,
                    String weekdayRoutineName,
-                   String restDays,
                    String weekendRoutineName,
                    LocalTime weekdayWakeTime,
                    LocalTime weekdaySleepTime,
@@ -74,7 +70,6 @@ public class Routine {
                    IntakeFrequency intakeFrequency) {
 
         this.user = user;
-        this.restDays = restDays;
         this.weekdayRoutineName = weekdayRoutineName;
         this.weekendRoutineName = weekendRoutineName;
         this.weekdayWakeTime = weekdayWakeTime;

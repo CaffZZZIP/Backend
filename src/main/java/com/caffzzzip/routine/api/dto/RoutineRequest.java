@@ -6,16 +6,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalTime;
 
-import java.util.List;
-
 @Schema(description = "사용자 초기 루틴 설정 요청")
 public record RoutineRequest(
 
         @Schema(description = "평일 루틴 이름", example = "수업")
         String weekdayRoutineName,
-
-        @Schema(description = "쉬는날로 적용할 요일 목록", example = "[\"FRIDAY\", \"SATURDAY\", \"SUNDAY\"]")
-        List<String> restDays,
 
         @Schema(description = "주말 루틴 이름", example = "공강")
         String weekendRoutineName,

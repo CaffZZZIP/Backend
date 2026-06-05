@@ -138,7 +138,6 @@ public class MenuService {
 
         RoutineType routineType = getSelectedRoutineType(
                 userId,
-                routine,
                 selectedIntakeAt.toLocalDate()
         );
 
@@ -188,36 +187,10 @@ public class MenuService {
         );
     }
 
-    private RoutineType getSelectedRoutineType(
-            Long userId,
-            Routine routine,
-            LocalDate date
-    ) {
-        return userDailyRoutineModeRepository
-                .findByUserIdAndTargetDate(userId, date)
+    private RoutineType getSelectedRoutineType(Long userId, LocalDate date) {
+        return userDailyRoutineModeRepository.findByUserIdAndTargetDate(userId, date)
                 .map(UserDailyRoutineMode::getRoutineType)
-                .orElseGet(() -> getRoutineTypeFromRoutine(routine, date));
-    }
-
-    private RoutineType getRoutineTypeFromRoutine(
-            Routine routine,
-            LocalDate date
-    ) {
-        String restDays = routine.getRestDays();
-
-        if (restDays == null || restDays.isBlank()) {
-            DayOfWeek day = date.getDayOfWeek();
-
-            return (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)
-                    ? RoutineType.WEEKEND
-                    : RoutineType.WEEKDAY;
-        }
-
-        String today = date.getDayOfWeek().name();
-
-        return List.of(restDays.split(",")).contains(today)
-                ? RoutineType.WEEKEND
-                : RoutineType.WEEKDAY;
+                .orElseGet(() -> getRoutineType(date.atStartOfDay()));
     }
 
     private Menu findMenu(Long menuId) {
@@ -284,6 +257,16 @@ public class MenuService {
         );
 
         return existingRemainingCaffeine + newRemainingCaffeine;
+    }
+
+    private RoutineType getRoutineType(LocalDateTime intakeAt) {
+        DayOfWeek dayOfWeek = intakeAt.getDayOfWeek();
+
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            return RoutineType.WEEKEND;
+        }
+
+        return RoutineType.WEEKDAY;
     }
 
     private LocalDateTime getSleepDateTime(

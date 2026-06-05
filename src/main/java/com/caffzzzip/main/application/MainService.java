@@ -6,10 +6,7 @@ import com.caffzzzip.intake.domain.IntakeLog;
 import com.caffzzzip.intake.domain.repository.IntakeLogRepository;
 import com.caffzzzip.intake_results.api.dto.DailyReportResponse;
 import com.caffzzzip.intake_results.application.ResultService;
-import com.caffzzzip.main.api.dto.MainCaffeineSummaryResponse;
-import com.caffzzzip.main.api.dto.MainDailyQuoteResponse;
-import com.caffzzzip.main.api.dto.MainIntakeItem;
-import com.caffzzzip.main.api.dto.MainRoutineResponse;
+import com.caffzzzip.main.api.dto.*;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.RoutineType;
 import com.caffzzzip.routine.domain.UserDailyRoutineMode;
@@ -21,12 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -37,23 +29,26 @@ import java.util.Locale;
 @Transactional(readOnly = true)
 public class MainService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final int DAILY_SAFE_LIMIT = 400;
-
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
     private final IntakeLogRepository intakeLogRepository;
     private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
     private final ResultService resultService;
 
+    // 한국 시간
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    // 하루 권장 최대 카페인량
+    private static final int DAILY_SAFE_LIMIT = 400;
+
     public MainRoutineResponse getRoutineInfo(Long userId) {
         Routine routine = findRoutine(userId);
         LocalDate today = getTodayKst();
 
-        RoutineType todayType = userDailyRoutineModeRepository
-                .findByUserIdAndTargetDate(userId, today)
+        // 임시 캐시 맵 대신 새 DB 테이블 조회
+        RoutineType todayType = userDailyRoutineModeRepository.findByUserIdAndTargetDate(userId, today)
                 .map(UserDailyRoutineMode::getRoutineType)
-                .orElseGet(() -> getRoutineTypeFromRoutine(routine, today));
+                .orElseGet(this::getTodayRoutineType);
 
         return buildRoutineResponse(routine, todayType);
     }
@@ -77,7 +72,6 @@ public class MainService {
                                     .targetDate(today)
                                     .routineType(routineType)
                                     .build();
-
                             userDailyRoutineModeRepository.save(newMode);
                         }
                 );
@@ -86,6 +80,7 @@ public class MainService {
     public MainCaffeineSummaryResponse getCaffeineSummary(Long userId) {
         DailyReportResponse report = resultService.getTodayReport(userId);
 
+        // 남은 여유 섭취량
         int remainingSafeAmount =
                 Math.max(0, DAILY_SAFE_LIMIT - report.getTotalCaffeine());
 
@@ -129,7 +124,9 @@ public class MainService {
                         .menuName(log.getMenu().getMenuName())
                         .brand(log.getMenu().getBrand())
                         .caffeineMg(log.getTotalCaffeine())
-                        .intakeTime(formatTime(log.getIntakeAt().toLocalTime()))
+                        .intakeTime(
+                                formatTime(log.getIntakeAt().toLocalTime())
+                        )
                         .build())
                 .toList();
     }
@@ -138,6 +135,7 @@ public class MainService {
             Routine routine,
             RoutineType type
     ) {
+
         String routineName = type == RoutineType.WEEKDAY
                 ? routine.getWeekdayRoutineName()
                 : routine.getWeekendRoutineName();
@@ -169,23 +167,11 @@ public class MainService {
         return ZonedDateTime.now(KST).toLocalDate();
     }
 
-    private RoutineType getRoutineTypeFromRoutine(
-            Routine routine,
-            LocalDate date
-    ) {
-        String restDays = routine.getRestDays();
+    private RoutineType getTodayRoutineType() {
+        DayOfWeek day = getTodayKst().getDayOfWeek();
 
-        if (restDays == null || restDays.isBlank()) {
-            DayOfWeek day = date.getDayOfWeek();
-
-            return (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)
-                    ? RoutineType.WEEKEND
-                    : RoutineType.WEEKDAY;
-        }
-
-        String today = date.getDayOfWeek().name();
-
-        return List.of(restDays.split(",")).contains(today)
+        return (day == DayOfWeek.SATURDAY
+                || day == DayOfWeek.SUNDAY)
                 ? RoutineType.WEEKEND
                 : RoutineType.WEEKDAY;
     }
@@ -194,6 +180,7 @@ public class MainService {
             int remainingCaffeine,
             List<MainIntakeItem> intakeList
     ) {
+
         if (intakeList.isEmpty()) {
             return "오늘은 아직 카페인을 섭취하지 않았어요.";
         }

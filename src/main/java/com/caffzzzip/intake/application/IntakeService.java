@@ -9,36 +9,32 @@ import com.caffzzzip.intake.domain.IntakeLog;
 import com.caffzzzip.intake.domain.repository.IntakeLogRepository;
 import com.caffzzzip.menu.domain.Menu;
 import com.caffzzzip.menu.domain.repository.MenuRepository;
-import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.RoutineType;
-import com.caffzzzip.routine.domain.UserDailyRoutineMode;
-import com.caffzzzip.routine.domain.repository.RoutineRepository;
-import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 import com.caffzzzip.user.domain.User;
 import com.caffzzzip.user.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class IntakeService {
 
-    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
-
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final MenuRepository menuRepository;
-    private final RoutineRepository routineRepository;
     private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     @Transactional
     public IntakeResponse createIntake(Long userId, IntakeCreateRequest request) {
@@ -46,7 +42,6 @@ public class IntakeService {
 
         User user = findUser(userId);
         Menu menu = findMenu(request.menuId());
-        Routine routine = findRoutine(userId);
 
         LocalDateTime intakeAt = request.intakeAt() != null
                 ? request.intakeAt()
@@ -54,10 +49,8 @@ public class IntakeService {
 
         RoutineType routineType = getSelectedRoutineType(
                 userId,
-                routine,
                 intakeAt.toLocalDate()
         );
-
         int totalCaffeine = menu.getCaffeineMg() * request.quantity();
 
         IntakeLog intakeLog = IntakeLog.builder()
@@ -80,8 +73,7 @@ public class IntakeService {
         LocalDateTime start = today.atStartOfDay();
         LocalDateTime end = today.plusDays(1).atStartOfDay();
 
-        return intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end)
-                .stream()
+        return intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end).stream()
                 .sorted(Comparator.comparing(IntakeLog::getIntakeAt).reversed())
                 .map(this::toResponse)
                 .toList();
@@ -99,18 +91,14 @@ public class IntakeService {
 
         validateOwner(intakeLog, userId);
 
-        Routine routine = findRoutine(userId);
-
         LocalDateTime intakeAt = request.intakeAt() != null
                 ? request.intakeAt()
                 : intakeLog.getIntakeAt();
 
         RoutineType routineType = getSelectedRoutineType(
                 userId,
-                routine,
                 intakeAt.toLocalDate()
         );
-
         int totalCaffeine = intakeLog.getMenu().getCaffeineMg() * request.quantity();
 
         intakeLog.update(
@@ -159,14 +147,6 @@ public class IntakeService {
                 ));
     }
 
-    private Routine findRoutine(Long userId) {
-        return routineRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.VALIDATION_ERROR,
-                        "사용자 루틴 설정을 찾을 수 없습니다."
-                ));
-    }
-
     private void validateQuantity(Integer quantity) {
         if (quantity == null || quantity < 1) {
             throw new BusinessException(
@@ -185,36 +165,26 @@ public class IntakeService {
         }
     }
 
+    private RoutineType getRoutineType(LocalDateTime intakeAt) {
+        DayOfWeek dayOfWeek = intakeAt.getDayOfWeek();
+
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            return RoutineType.WEEKEND;
+        }
+
+        return RoutineType.WEEKDAY;
+    }
+
     private RoutineType getSelectedRoutineType(
             Long userId,
-            Routine routine,
             LocalDate date
     ) {
         return userDailyRoutineModeRepository
                 .findByUserIdAndTargetDate(userId, date)
                 .map(UserDailyRoutineMode::getRoutineType)
-                .orElseGet(() -> getRoutineTypeFromRoutine(routine, date));
-    }
-
-    private RoutineType getRoutineTypeFromRoutine(
-            Routine routine,
-            LocalDate date
-    ) {
-        String restDays = routine.getRestDays();
-
-        if (restDays == null || restDays.isBlank()) {
-            DayOfWeek day = date.getDayOfWeek();
-
-            return (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)
-                    ? RoutineType.WEEKEND
-                    : RoutineType.WEEKDAY;
-        }
-
-        String today = date.getDayOfWeek().name();
-
-        return List.of(restDays.split(",")).contains(today)
-                ? RoutineType.WEEKEND
-                : RoutineType.WEEKDAY;
+                .orElseGet(() ->
+                        getRoutineType(date.atStartOfDay())
+                );
     }
 
     private IntakeResponse toResponse(IntakeLog intakeLog) {
