@@ -11,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -37,21 +40,19 @@ public class RoutineService {
 
         Routine routine = Routine.builder()
                 .user(user)
-
                 .weekdayRoutineName(
                         request.weekdayRoutineName() == null
                                 || request.weekdayRoutineName().isBlank()
                                 ? "평소"
                                 : request.weekdayRoutineName()
                 )
-
                 .weekendRoutineName(
                         request.weekendRoutineName() == null
                                 || request.weekendRoutineName().isBlank()
                                 ? "쉬는 날"
                                 : request.weekendRoutineName()
                 )
-
+                .restDays(convertRestDaysToString(request.restDays()))
                 .weekdayWakeTime(request.weekdayWakeTime())
                 .weekdaySleepTime(request.weekdaySleepTime())
                 .weekendWakeTime(request.weekendWakeTime())
@@ -63,5 +64,13 @@ public class RoutineService {
         routineRepository.save(routine);
 
         user.completeInitialSetting();
+    }
+
+    private String convertRestDaysToString(List<String> restDays) {
+        if (restDays == null || restDays.isEmpty()) {
+            return DayOfWeek.SATURDAY.name() + "," + DayOfWeek.SUNDAY.name();
+        }
+
+        return String.join(",", restDays);
     }
 }

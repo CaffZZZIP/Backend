@@ -7,11 +7,11 @@ import com.caffzzzip.intake_results.api.dto.ResultItem;
 import com.caffzzzip.routine.domain.CaffeineSensitivity;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.RoutineType;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import com.caffzzzip.routine.domain.UserDailyRoutineMode;
-import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 
 import java.time.*;
 import java.util.List;
@@ -36,11 +36,11 @@ public class ResultService {
         LocalDate today = LocalDate.now(KOREA_ZONE_ID);
         LocalDateTime now = LocalDateTime.now(KOREA_ZONE_ID);
 
-        RoutineType todayType =
-                getSelectedRoutineType(
-                        userId,
-                        today
-                );
+        RoutineType todayType = getSelectedRoutineType(
+                userId,
+                routine,
+                today
+        );
 
         LocalTime sleepLocalTime =
                 todayType == RoutineType.WEEKEND
@@ -141,6 +141,38 @@ public class ResultService {
                 .build();
     }
 
+    private RoutineType getSelectedRoutineType(
+            Long userId,
+            Routine routine,
+            LocalDate date
+    ) {
+        return userDailyRoutineModeRepository
+                .findByUserIdAndTargetDate(userId, date)
+                .map(UserDailyRoutineMode::getRoutineType)
+                .orElseGet(() -> getRoutineTypeFromRoutine(routine, date));
+    }
+
+    private RoutineType getRoutineTypeFromRoutine(
+            Routine routine,
+            LocalDate date
+    ) {
+        String restDays = routine.getRestDays();
+
+        if (restDays == null || restDays.isBlank()) {
+            DayOfWeek day = date.getDayOfWeek();
+
+            return (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY)
+                    ? RoutineType.WEEKEND
+                    : RoutineType.WEEKDAY;
+        }
+
+        String today = date.getDayOfWeek().name();
+
+        return List.of(restDays.split(",")).contains(today)
+                ? RoutineType.WEEKEND
+                : RoutineType.WEEKDAY;
+    }
+
     private double calculateRemainingCaffeine(
             int caffeineMg,
             LocalDateTime intakeTime,
@@ -178,33 +210,19 @@ public class ResultService {
     ) {
         return switch (sensitivity) {
             case HIGH -> {
-                if (total <= 150) {
-                    yield "SAFE";
-                } else if (total <= 250) {
-                    yield "CAUTION";
-                } else {
-                    yield "DANGER";
-                }
+                if (total <= 150) yield "SAFE";
+                else if (total <= 250) yield "CAUTION";
+                else yield "DANGER";
             }
-
             case NORMAL -> {
-                if (total <= 300) {
-                    yield "SAFE";
-                } else if (total <= 400) {
-                    yield "CAUTION";
-                } else {
-                    yield "DANGER";
-                }
+                if (total <= 300) yield "SAFE";
+                else if (total <= 400) yield "CAUTION";
+                else yield "DANGER";
             }
-
             case LOW -> {
-                if (total <= 400) {
-                    yield "SAFE";
-                } else if (total <= 500) {
-                    yield "CAUTION";
-                } else {
-                    yield "DANGER";
-                }
+                if (total <= 400) yield "SAFE";
+                else if (total <= 500) yield "CAUTION";
+                else yield "DANGER";
             }
         };
     }
@@ -257,24 +275,5 @@ public class ResultService {
                 currentRemaining,
                 sleepTime
         );
-    }
-    private RoutineType getSelectedRoutineType(
-            Long userId,
-            LocalDate date
-    ) {
-        return userDailyRoutineModeRepository
-                .findByUserIdAndTargetDate(userId, date)
-                .map(UserDailyRoutineMode::getRoutineType)
-                .orElseGet(() -> {
-
-                    DayOfWeek dayOfWeek = date.getDayOfWeek();
-
-                    if (dayOfWeek == DayOfWeek.SATURDAY
-                            || dayOfWeek == DayOfWeek.SUNDAY) {
-                        return RoutineType.WEEKEND;
-                    }
-
-                    return RoutineType.WEEKDAY;
-                });
     }
 }

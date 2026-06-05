@@ -124,7 +124,9 @@ public class IntakeController {
                     - 메뉴 카페인 함량 × 수정된 수량
                     
                     2. routineType
-                    - 수정된 intakeAt 기준으로 WEEKDAY / WEEKEND 자동 재계산
+                    - 메인 화면에서 오늘 선택한 루틴 모드가 있으면 해당 값을 우선 적용합니다.
+                    - 선택된 값이 없으면 intakeAt 날짜 기준으로 WEEKDAY / WEEKEND를 자동 판단합니다.
+                    - 사용자가 직접 입력하지 않습니다.
                     
                     수정 후 오늘 카페인 통계와 결과 리포트에도 반영됩니다.
                     """
