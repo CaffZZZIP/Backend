@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +29,7 @@ public class MyPageService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     // 마이페이지 메인 & 주간 통계 조회 로직
     @Transactional(readOnly = true)
@@ -152,7 +154,7 @@ public class MyPageService {
     // 주간 통계 계산 내부 메서드
     private List<WeeklyStatisticsDto> calculateWeeklyStats(Long userId, Routine routine) {
         List<WeeklyStatisticsDto> list = new ArrayList<>();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KOREA_ZONE_ID);
 
         for (int i = 6; i >= 0; i--) {
             LocalDate targetDate = today.minusDays(i);
