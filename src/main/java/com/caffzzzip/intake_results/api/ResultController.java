@@ -71,9 +71,14 @@ public class ResultController {
                 - 하루 권장량 대비 위험도 표시 영역에서 사용할 수 있습니다.
 
                 6. recommendedSleepTime
-                - 사용자가 루틴 설정에서 입력한 오늘 기준 취침 시간입니다.
-                - 평일이면 weekdaySleepTime, 주말이면 weekendSleepTime을 사용합니다.
-                - 현재는 별도 추천 계산 시간이 아니라 사용자의 목표 취침 시간 기준입니다.
+                    사용자가 오늘 선택한 루틴 모드 기준 취침 시간을 사용합니다.
+                    우선순위:
+
+                    1. 메인 화면에서 선택한 오늘 루틴 모드
+                    2. 선택값이 없으면 실제 요일 기준 자동 판단
+
+                    금요일이라도 사용자가 메인에서 쉬는날(WEEKEND)을 선택한 경우
+                    weekendSleepTime을 사용합니다.
 
                 7. sleepImpactLevel
                 - bedtimeRemainingCaffeine을 기준으로 계산한 수면 방해 가능성입니다.

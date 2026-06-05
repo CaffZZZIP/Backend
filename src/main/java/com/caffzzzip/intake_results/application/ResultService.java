@@ -10,6 +10,8 @@ import com.caffzzzip.routine.domain.RoutineType;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 
 import java.time.*;
 import java.util.List;
@@ -22,6 +24,7 @@ public class ResultService {
 
     private final IntakeLogRepository intakeLogRepository;
     private final RoutineRepository routineRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
 
     public DailyReportResponse getTodayReport(Long userId) {
 
@@ -34,9 +37,10 @@ public class ResultService {
         LocalDateTime now = LocalDateTime.now(KOREA_ZONE_ID);
 
         RoutineType todayType =
-                (today.getDayOfWeek().getValue() >= 6)
-                        ? RoutineType.WEEKEND
-                        : RoutineType.WEEKDAY;
+                getSelectedRoutineType(
+                        userId,
+                        today
+                );
 
         LocalTime sleepLocalTime =
                 todayType == RoutineType.WEEKEND
@@ -253,5 +257,24 @@ public class ResultService {
                 currentRemaining,
                 sleepTime
         );
+    }
+    private RoutineType getSelectedRoutineType(
+            Long userId,
+            LocalDate date
+    ) {
+        return userDailyRoutineModeRepository
+                .findByUserIdAndTargetDate(userId, date)
+                .map(UserDailyRoutineMode::getRoutineType)
+                .orElseGet(() -> {
+
+                    DayOfWeek dayOfWeek = date.getDayOfWeek();
+
+                    if (dayOfWeek == DayOfWeek.SATURDAY
+                            || dayOfWeek == DayOfWeek.SUNDAY) {
+                        return RoutineType.WEEKEND;
+                    }
+
+                    return RoutineType.WEEKDAY;
+                });
     }
 }

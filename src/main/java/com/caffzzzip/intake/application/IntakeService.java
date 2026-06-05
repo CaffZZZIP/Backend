@@ -15,6 +15,8 @@ import com.caffzzzip.user.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -31,6 +33,7 @@ public class IntakeService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final MenuRepository menuRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
     private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     @Transactional
@@ -44,7 +47,10 @@ public class IntakeService {
                 ? request.intakeAt()
                 : LocalDateTime.now(KOREA_ZONE_ID);
 
-        RoutineType routineType = getRoutineType(intakeAt);
+        RoutineType routineType = getSelectedRoutineType(
+                userId,
+                intakeAt.toLocalDate()
+        );
         int totalCaffeine = menu.getCaffeineMg() * request.quantity();
 
         IntakeLog intakeLog = IntakeLog.builder()
@@ -89,7 +95,10 @@ public class IntakeService {
                 ? request.intakeAt()
                 : intakeLog.getIntakeAt();
 
-        RoutineType routineType = getRoutineType(intakeAt);
+        RoutineType routineType = getSelectedRoutineType(
+                userId,
+                intakeAt.toLocalDate()
+        );
         int totalCaffeine = intakeLog.getMenu().getCaffeineMg() * request.quantity();
 
         intakeLog.update(
@@ -164,6 +173,18 @@ public class IntakeService {
         }
 
         return RoutineType.WEEKDAY;
+    }
+
+    private RoutineType getSelectedRoutineType(
+            Long userId,
+            LocalDate date
+    ) {
+        return userDailyRoutineModeRepository
+                .findByUserIdAndTargetDate(userId, date)
+                .map(UserDailyRoutineMode::getRoutineType)
+                .orElseGet(() ->
+                        getRoutineType(date.atStartOfDay())
+                );
     }
 
     private IntakeResponse toResponse(IntakeLog intakeLog) {

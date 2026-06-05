@@ -11,9 +11,14 @@ import java.time.LocalDate;
 
 @Entity
 @Getter
-@Table(name = "user_daily_routine_modes", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id", "target_date"})
-})
+@Table(
+        name = "user_daily_routine_modes",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        columnNames = {"user_id", "target_date"}
+                )
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserDailyRoutineMode {
 
@@ -33,7 +38,11 @@ public class UserDailyRoutineMode {
     private RoutineType routineType;
 
     @Builder
-    public UserDailyRoutineMode(User user, LocalDate targetDate, RoutineType routineType) {
+    public UserDailyRoutineMode(
+            User user,
+            LocalDate targetDate,
+            RoutineType routineType
+    ) {
         this.user = user;
         this.targetDate = targetDate;
         this.routineType = routineType;

@@ -13,7 +13,9 @@ import com.caffzzzip.menu.domain.repository.MenuRepository;
 import com.caffzzzip.routine.domain.CaffeineSensitivity;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.RoutineType;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class MenuService {
     private final MenuRepository menuRepository;
     private final IntakeLogRepository intakeLogRepository;
     private final RoutineRepository routineRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
 
     public List<BrandResponse> getBrands() {
         return menuRepository.findByIsActiveTrue().stream()
@@ -53,21 +56,18 @@ public class MenuService {
             case "할리스" -> "/images/brands/hollys.png";
             case "메가커피" -> "/images/brands/mega-coffee.png";
             case "빽다방" -> "/images/brands/paikdabang.png";
-
             case "더벤티" -> "/images/brands/theventi.png";
             case "에너지드링크" -> "/images/brands/energy-drink.png";
             case "커피빈" -> "/images/brands/coffeebean.png";
             case "폴바셋" -> "/images/brands/paulbassett.png";
             case "투썸플레이스" -> "/images/brands/twosomeplace.png";
             case "탐앤탐스" -> "/images/brands/tomntoms.png";
-
             default -> "/images/brands/default.png";
         };
     }
 
     public List<MenuResponse> getMenusByCategory(Long categoryId) {
         List<Menu> menus = menuRepository.findByCategoryIdAndIsActiveTrue(categoryId);
-
         return sortAndConvertToMenuResponses(menus);
     }
 
@@ -119,10 +119,7 @@ public class MenuService {
                 ? intakeAt
                 : LocalDateTime.now(KOREA_ZONE_ID);
 
-        int selectedQuantity = quantity != null
-                ? quantity
-                : 1;
-
+        int selectedQuantity = quantity != null ? quantity : 1;
         validateQuantity(selectedQuantity);
 
         int intakeCaffeine = menu.getCaffeineMg() * selectedQuantity;
@@ -139,7 +136,10 @@ public class MenuService {
                 routine.getCaffeineSensitivity()
         );
 
-        RoutineType routineType = getRoutineType(selectedIntakeAt);
+        RoutineType routineType = getSelectedRoutineType(
+                userId,
+                selectedIntakeAt.toLocalDate()
+        );
 
         LocalDateTime sleepDateTime = getSleepDateTime(
                 selectedIntakeAt,
@@ -185,6 +185,12 @@ public class MenuService {
                 expectedRemainingCaffeine,
                 guideMessage
         );
+    }
+
+    private RoutineType getSelectedRoutineType(Long userId, LocalDate date) {
+        return userDailyRoutineModeRepository.findByUserIdAndTargetDate(userId, date)
+                .map(UserDailyRoutineMode::getRoutineType)
+                .orElseGet(() -> getRoutineType(date.atStartOfDay()));
     }
 
     private Menu findMenu(Long menuId) {
@@ -313,31 +319,19 @@ public class MenuService {
     ) {
         return switch (sensitivity) {
             case HIGH -> {
-                if (expectedTotalCaffeine <= 150) {
-                    yield RiskLevel.SAFE;
-                } else if (expectedTotalCaffeine <= 250) {
-                    yield RiskLevel.CAUTION;
-                } else {
-                    yield RiskLevel.DANGER;
-                }
+                if (expectedTotalCaffeine <= 150) yield RiskLevel.SAFE;
+                else if (expectedTotalCaffeine <= 250) yield RiskLevel.CAUTION;
+                else yield RiskLevel.DANGER;
             }
             case NORMAL -> {
-                if (expectedTotalCaffeine <= 300) {
-                    yield RiskLevel.SAFE;
-                } else if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) {
-                    yield RiskLevel.CAUTION;
-                } else {
-                    yield RiskLevel.DANGER;
-                }
+                if (expectedTotalCaffeine <= 300) yield RiskLevel.SAFE;
+                else if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) yield RiskLevel.CAUTION;
+                else yield RiskLevel.DANGER;
             }
             case LOW -> {
-                if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) {
-                    yield RiskLevel.SAFE;
-                } else if (expectedTotalCaffeine <= 500) {
-                    yield RiskLevel.CAUTION;
-                } else {
-                    yield RiskLevel.DANGER;
-                }
+                if (expectedTotalCaffeine <= DAILY_RECOMMENDED_LIMIT) yield RiskLevel.SAFE;
+                else if (expectedTotalCaffeine <= 500) yield RiskLevel.CAUTION;
+                else yield RiskLevel.DANGER;
             }
         };
     }
