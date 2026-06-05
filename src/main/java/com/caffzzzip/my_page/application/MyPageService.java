@@ -9,6 +9,7 @@ import com.caffzzzip.routine.api.dto.RoutineRequest;
 import com.caffzzzip.routine.domain.CaffeineSensitivity;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 import com.caffzzzip.user.domain.User;
 import com.caffzzzip.user.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,11 +27,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MyPageService {
 
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
+
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
 
-    // 마이페이지 메인 & 주간 통계 조회 로직
     @Transactional(readOnly = true)
     public MyPageResponse getMyPageInfo(Long userId) {
 
@@ -44,31 +48,22 @@ public class MyPageService {
 
         return MyPageResponse.builder()
                 .nickname(user.getNickname())
-
                 .sensitivity(
                         routine != null
                                 ? routine.getCaffeineSensitivity().name()
                                 : null
                 )
-
-                // 평일 루틴명 기준 출력
                 .routineType(
                         routine != null
                                 ? routine.getWeekdayRoutineName()
                                 : "루틴 미설정"
                 )
-
                 .weeklyStatistics(
-                        calculateWeeklyStats(
-                                userId,
-                                routine
-                        )
+                        calculateWeeklyStats(userId, routine)
                 )
-
                 .build();
     }
 
-    // 사용자 루틴 조회
     @Transactional(readOnly = true)
     public MyPageRoutineResponse getMyRoutineInfo(Long userId) {
 
@@ -112,17 +107,21 @@ public class MyPageService {
                 .build();
     }
 
-
     @Transactional
     public void updateMyRoutine(Long userId, RoutineRequest request) {
 
         Routine routine = routineRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("설정된 루틴이 없습니다."));
 
+        String weekdayName =
+                request.weekdayRoutineName() == null || request.weekdayRoutineName().isBlank()
+                        ? "평소"
+                        : request.weekdayRoutineName();
 
-        String weekdayName = request.weekdayRoutineName() == null || request.weekdayRoutineName().isBlank() ? "평소" : request.weekdayRoutineName();
-        String weekendName = request.weekendRoutineName() == null || request.weekendRoutineName().isBlank() ? "쉬는 날" : request.weekendRoutineName();
-
+        String weekendName =
+                request.weekendRoutineName() == null || request.weekendRoutineName().isBlank()
+                        ? "쉬는 날"
+                        : request.weekendRoutineName();
 
         try {
             setField(routine, "weekdayRoutineName", weekdayName);
@@ -136,10 +135,7 @@ public class MyPageService {
         } catch (Exception e) {
             throw new RuntimeException("루틴 수정 반영 중 오류가 발생했습니다.", e);
         }
-
-
     }
-
 
     private void setField(Object target, String fieldName, Object value) throws Exception {
         if (value != null) {
@@ -149,20 +145,32 @@ public class MyPageService {
         }
     }
 
-    // 주간 통계 계산 내부 메서드
     private List<WeeklyStatisticsDto> calculateWeeklyStats(Long userId, Routine routine) {
         List<WeeklyStatisticsDto> list = new ArrayList<>();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KOREA_ZONE_ID);
 
         for (int i = 6; i >= 0; i--) {
             LocalDate targetDate = today.minusDays(i);
             LocalDateTime start = targetDate.atStartOfDay();
             LocalDateTime end = targetDate.plusDays(1).atStartOfDay();
 
-            List<IntakeLog> logs = intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, start, end);
-            int totalCaffeine = logs.stream().mapToInt(IntakeLog::getTotalCaffeine).sum();
+            List<IntakeLog> logs =
+                    intakeLogRepository.findByUserIdAndIntakeAtBetween(
+                            userId,
+                            start,
+                            end
+                    );
 
-            String riskLevel = calculateRiskLevel(totalCaffeine, routine != null ? routine.getCaffeineSensitivity() : CaffeineSensitivity.NORMAL);
+            int totalCaffeine = logs.stream()
+                    .mapToInt(IntakeLog::getTotalCaffeine)
+                    .sum();
+
+            String riskLevel = calculateRiskLevel(
+                    totalCaffeine,
+                    routine != null
+                            ? routine.getCaffeineSensitivity()
+                            : CaffeineSensitivity.NORMAL
+            );
 
             list.add(WeeklyStatisticsDto.builder()
                     .dayOfWeek(getDayOfWeekKorean(targetDate.getDayOfWeek()))
@@ -170,10 +178,10 @@ public class MyPageService {
                     .riskLevel(riskLevel)
                     .build());
         }
+
         return list;
     }
 
-    // 위험도 계산 내부 메서드
     private String calculateRiskLevel(int total, CaffeineSensitivity sensitivity) {
         return switch (sensitivity) {
             case HIGH -> {
@@ -194,7 +202,6 @@ public class MyPageService {
         };
     }
 
-    // 요일 한글 변환 내부 메서드
     private String getDayOfWeekKorean(DayOfWeek dayOfWeek) {
         return switch (dayOfWeek) {
             case MONDAY -> "월";
@@ -207,34 +214,31 @@ public class MyPageService {
         };
     }
 
-    // 로그아웃
     public void logout() {
         System.out.println("로그아웃 처리가 요청되었습니다.");
     }
 
-    // 회원 탈퇴 (안전하게 수정 완료)
     @Transactional
     public void deleteUser(Long userId) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 유저가 없습니다."));
 
-
         routineRepository.findByUserId(userId)
-                .ifPresent(routine -> routineRepository.delete(routine));
+                .ifPresent(routineRepository::delete);
 
+        userDailyRoutineModeRepository.deleteByUserId(userId);
 
-        List<IntakeLog> logs = intakeLogRepository.findByUserIdAndIntakeAtBetween(
-                userId,
-                LocalDateTime.of(1970, 1, 1, 0, 0),
-                LocalDateTime.of(2099, 12, 31, 23, 59)
-        );
-
+        List<IntakeLog> logs =
+                intakeLogRepository.findByUserIdAndIntakeAtBetween(
+                        userId,
+                        LocalDateTime.of(1970, 1, 1, 0, 0),
+                        LocalDateTime.of(2099, 12, 31, 23, 59)
+                );
 
         if (!logs.isEmpty()) {
             intakeLogRepository.deleteAllInBatch(logs);
         }
-
 
         userRepository.delete(user);
     }
