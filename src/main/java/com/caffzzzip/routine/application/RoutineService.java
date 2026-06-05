@@ -3,7 +3,6 @@ package com.caffzzzip.routine.application;
 import com.caffzzzip.common.error.ErrorCode;
 import com.caffzzzip.common.exception.BusinessException;
 import com.caffzzzip.routine.api.dto.RoutineRequest;
-import com.caffzzzip.routine.api.dto.RoutineResponse;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
 import com.caffzzzip.user.domain.User;
@@ -24,7 +23,7 @@ public class RoutineService {
     private final UserRepository userRepository;
 
     @Transactional
-    public RoutineResponse createRoutine(Long userId, RoutineRequest request) {
+    public void createRoutine(Long userId, RoutineRequest request) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(
@@ -65,18 +64,6 @@ public class RoutineService {
         routineRepository.save(routine);
 
         user.completeInitialSetting();
-
-        return new RoutineResponse(
-                routine.getWeekdayRoutineName(),
-                List.of(routine.getRestDays().split(",")),
-                routine.getWeekendRoutineName(),
-                routine.getWeekdayWakeTime(),
-                routine.getWeekdaySleepTime(),
-                routine.getWeekendWakeTime(),
-                routine.getWeekendSleepTime(),
-                routine.getCaffeineSensitivity(),
-                routine.getIntakeFrequency()
-        );
     }
 
     private String convertRestDaysToString(List<String> restDays) {
