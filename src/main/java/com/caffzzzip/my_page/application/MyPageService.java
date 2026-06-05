@@ -20,7 +20,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +28,6 @@ public class MyPageService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
-    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     // 마이페이지 메인 & 주간 통계 조회 로직
     @Transactional(readOnly = true)
@@ -154,7 +152,7 @@ public class MyPageService {
     // 주간 통계 계산 내부 메서드
     private List<WeeklyStatisticsDto> calculateWeeklyStats(Long userId, Routine routine) {
         List<WeeklyStatisticsDto> list = new ArrayList<>();
-        LocalDate today = LocalDate.now(KOREA_ZONE_ID);
+        LocalDate today = LocalDate.now();
 
         for (int i = 6; i >= 0; i--) {
             LocalDate targetDate = today.minusDays(i);
@@ -214,20 +212,30 @@ public class MyPageService {
         System.out.println("로그아웃 처리가 요청되었습니다.");
     }
 
-    // 회원 탈퇴
+    // 회원 탈퇴 (안전하게 수정 완료)
     @Transactional
     public void deleteUser(Long userId) {
-        userRepository.findById(userId)
+
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 유저가 없습니다."));
+
 
         routineRepository.findByUserId(userId)
                 .ifPresent(routine -> routineRepository.delete(routine));
 
-        List<IntakeLog> logs = intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, LocalDateTime.MIN, LocalDateTime.MAX);
+
+        List<IntakeLog> logs = intakeLogRepository.findByUserIdAndIntakeAtBetween(
+                userId,
+                LocalDateTime.of(1970, 1, 1, 0, 0),
+                LocalDateTime.of(2099, 12, 31, 23, 59)
+        );
+
+
         if (!logs.isEmpty()) {
-            intakeLogRepository.deleteAll(logs);
+            intakeLogRepository.deleteAllInBatch(logs);
         }
 
-        userRepository.deleteById(userId);
+
+        userRepository.delete(user);
     }
 }
