@@ -1,5 +1,6 @@
 package com.caffzzzip.my_page.application;
 
+import com.caffzzzip.favorite.domain.repository.FavoriteRepository;
 import com.caffzzzip.intake.domain.IntakeLog;
 import com.caffzzzip.intake.domain.repository.IntakeLogRepository;
 import com.caffzzzip.my_page.api.dto.MyPageResponse;
@@ -32,8 +33,10 @@ public class MyPageService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
+    private final FavoriteRepository favoriteRepository;
     private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
 
+    // 마이페이지 메인 & 주간 통계 조회 로직
     @Transactional(readOnly = true)
     public MyPageResponse getMyPageInfo(Long userId) {
 
@@ -48,22 +51,31 @@ public class MyPageService {
 
         return MyPageResponse.builder()
                 .nickname(user.getNickname())
+
                 .sensitivity(
                         routine != null
                                 ? routine.getCaffeineSensitivity().name()
                                 : null
                 )
+
+                // 평일 루틴명 기준 출력
                 .routineType(
                         routine != null
                                 ? routine.getWeekdayRoutineName()
                                 : "루틴 미설정"
                 )
+
                 .weeklyStatistics(
-                        calculateWeeklyStats(userId, routine)
+                        calculateWeeklyStats(
+                                userId,
+                                routine
+                        )
                 )
+
                 .build();
     }
 
+    // 사용자 루틴 조회
     @Transactional(readOnly = true)
     public MyPageRoutineResponse getMyRoutineInfo(Long userId) {
 
@@ -145,6 +157,7 @@ public class MyPageService {
         }
     }
 
+    // 주간 통계 계산 내부 메서드
     private List<WeeklyStatisticsDto> calculateWeeklyStats(Long userId, Routine routine) {
         List<WeeklyStatisticsDto> list = new ArrayList<>();
         LocalDate today = LocalDate.now(KOREA_ZONE_ID);
@@ -182,6 +195,7 @@ public class MyPageService {
         return list;
     }
 
+    // 위험도 계산 내부 메서드
     private String calculateRiskLevel(int total, CaffeineSensitivity sensitivity) {
         return switch (sensitivity) {
             case HIGH -> {
@@ -202,6 +216,7 @@ public class MyPageService {
         };
     }
 
+    // 요일 한글 변환 내부 메서드
     private String getDayOfWeekKorean(DayOfWeek dayOfWeek) {
         return switch (dayOfWeek) {
             case MONDAY -> "월";
@@ -214,32 +229,26 @@ public class MyPageService {
         };
     }
 
+    // 로그아웃
     public void logout() {
         System.out.println("로그아웃 처리가 요청되었습니다.");
     }
 
+    // 회원 탈퇴
     @Transactional
     public void deleteUser(Long userId) {
 
+        // 삭제 대상 유저 검증
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 유저가 없습니다."));
 
-        routineRepository.findByUserId(userId)
-                .ifPresent(routineRepository::delete);
-
+        // User를 참조하는 자식 테이블 먼저 삭제
         userDailyRoutineModeRepository.deleteByUserId(userId);
+        favoriteRepository.deleteByUserId(userId);
+        intakeLogRepository.deleteByUserId(userId);
+        routineRepository.deleteByUserId(userId);
 
-        List<IntakeLog> logs =
-                intakeLogRepository.findByUserIdAndIntakeAtBetween(
-                        userId,
-                        LocalDateTime.of(1970, 1, 1, 0, 0),
-                        LocalDateTime.of(2099, 12, 31, 23, 59)
-                );
-
-        if (!logs.isEmpty()) {
-            intakeLogRepository.deleteAllInBatch(logs);
-        }
-
+        // 마지막에 User 삭제
         userRepository.delete(user);
     }
 }
