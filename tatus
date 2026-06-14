@@ -1,0 +1,13 @@
+* [33mc6eecfd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeat/7-mypage[m[33m)[m merge complete
+*   [33mcdf1331[m[33m ([m[1;31morigin/feat/7-mypage[m[33m)[m Merge branch 'develop' into feat/7-mypage
+[32m|[m[33m\[m  
+[32m|[m * [33m83e27d0[m[33m ([m[1;32mdevelop[m[33m)[m feat:섭취기록 로직 수정
+[32m|[m * [33m1adcf9f[m feat: 브랜드별 메뉴 목록 카테고리 우선 정렬 적용
+[32m|[m *   [33m422c893[m Merge pull request #19 from CaffZZZIP/feat/7-mypage
+[32m|[m [34m|[m[35m\[m  
+[32m|[m [34m|[m *   [33m8200879[m Merge pull request #18 from vistonne/feat/7-mypage
+[32m|[m [34m|[m [36m|[m[1;31m\[m  
+[32m|[m * [36m|[m [1;31m|[m [33mec6dc94[m feat:브랜드 사진 추가
+[32m|[m * [36m|[m [1;31m|[m [33m013cbb9[m feature: 프론트 연동을 위한 CORS 설정 추가
+[32m|[m * [36m|[m [1;31m|[m [33me35c95b[m feat: 스웨거 예시응답 에러 해결
+[32m|[m * [36m|[m [1;31m|[m [33me8b2ecd[m feat: : 프엔 ë카카오 로그인 스웨거 설정 수정

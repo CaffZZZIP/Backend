@@ -9,7 +9,11 @@ import com.caffzzzip.intake_results.application.ResultService;
 import com.caffzzzip.main.api.dto.*;
 import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.RoutineType;
+import com.caffzzzip.routine.domain.UserDailyRoutineMode;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
+import com.caffzzzip.user.domain.User;
+import com.caffzzzip.user.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,16 +23,16 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MainService {
 
+    private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
     private final IntakeLogRepository intakeLogRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
     private final ResultService resultService;
 
     // 한국 시간
@@ -37,27 +41,40 @@ public class MainService {
     // 하루 권장 최대 카페인량
     private static final int DAILY_SAFE_LIMIT = 400;
 
-    // 오늘 사용자가 선택한 루틴 모드  저장
-
-    private final Map<Long, RoutineType> todayRoutineModeCache = new ConcurrentHashMap<>();
-
     public MainRoutineResponse getRoutineInfo(Long userId) {
         Routine routine = findRoutine(userId);
+        LocalDate today = getTodayKst();
 
-        // 사용자가 오늘 선택한 모드가 있으면 우선 적용
-        // 없으면 자동 판단
-        RoutineType todayType =
-                todayRoutineModeCache.getOrDefault(
-                        userId,
-                        getTodayRoutineType()
-                );
+        // 임시 캐시 맵 대신 새 DB 테이블 조회
+        RoutineType todayType = userDailyRoutineModeRepository.findByUserIdAndTargetDate(userId, today)
+                .map(UserDailyRoutineMode::getRoutineType)
+                .orElseGet(this::getTodayRoutineType);
 
         return buildRoutineResponse(routine, todayType);
     }
 
     @Transactional
     public void setTodayRoutineMode(Long userId, RoutineType routineType) {
-        todayRoutineModeCache.put(userId, routineType);
+        LocalDate today = getTodayKst();
+
+        userDailyRoutineModeRepository.findByUserIdAndTargetDate(userId, today)
+                .ifPresentOrElse(
+                        existingMode -> existingMode.updateRoutineType(routineType),
+                        () -> {
+                            User user = userRepository.findById(userId)
+                                    .orElseThrow(() -> new BusinessException(
+                                            ErrorCode.VALIDATION_ERROR,
+                                            "해당 유저가 없습니다."
+                                    ));
+
+                            UserDailyRoutineMode newMode = UserDailyRoutineMode.builder()
+                                    .user(user)
+                                    .targetDate(today)
+                                    .routineType(routineType)
+                                    .build();
+                            userDailyRoutineModeRepository.save(newMode);
+                        }
+                );
     }
 
     public MainCaffeineSummaryResponse getCaffeineSummary(Long userId) {
@@ -114,8 +131,6 @@ public class MainService {
                 .toList();
     }
 
-
-
     private MainRoutineResponse buildRoutineResponse(
             Routine routine,
             RoutineType type
@@ -151,7 +166,6 @@ public class MainService {
     private LocalDate getTodayKst() {
         return ZonedDateTime.now(KST).toLocalDate();
     }
-
 
     private RoutineType getTodayRoutineType() {
         DayOfWeek day = getTodayKst().getDayOfWeek();
@@ -196,7 +210,6 @@ public class MainService {
 
         return "오늘은 비교적 안정적인 카페인 섭취 상태예요.";
     }
-
 
     private String formatTime(LocalTime time) {
         if (time == null) {

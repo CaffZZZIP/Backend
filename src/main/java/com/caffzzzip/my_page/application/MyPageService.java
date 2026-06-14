@@ -11,6 +11,8 @@ import com.caffzzzip.routine.domain.Routine;
 import com.caffzzzip.routine.domain.repository.RoutineRepository;
 import com.caffzzzip.user.domain.User;
 import com.caffzzzip.user.domain.repository.UserRepository;
+import com.caffzzzip.favorite.domain.repository.FavoriteRepository;
+import com.caffzzzip.routine.domain.repository.UserDailyRoutineModeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,8 @@ public class MyPageService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final RoutineRepository routineRepository;
+    private final FavoriteRepository favoriteRepository;
+    private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
 
     // 마이페이지 메인 & 주간 통계 조회 로직
     @Transactional(readOnly = true)
@@ -212,20 +216,20 @@ public class MyPageService {
         System.out.println("로그아웃 처리가 요청되었습니다.");
     }
 
-    // 회원 탈퇴
+    // 회원 탈퇴 (안전하게 수정 완료)
     @Transactional
     public void deleteUser(Long userId) {
-        userRepository.findById(userId)
+        //삭제 대상 유저 검증
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 유저가 없습니다."));
 
-        routineRepository.findByUserId(userId)
-                .ifPresent(routine -> routineRepository.delete(routine));
+        //자식 테이블 삭제
+        userDailyRoutineModeRepository.deleteByUserId(userId);
+        favoriteRepository.deleteByUserId(userId);
+        intakeLogRepository.deleteByUserId(userId);
+        routineRepository.deleteByUserId(userId);
 
-        List<IntakeLog> logs = intakeLogRepository.findByUserIdAndIntakeAtBetween(userId, LocalDateTime.MIN, LocalDateTime.MAX);
-        if (!logs.isEmpty()) {
-            intakeLogRepository.deleteAll(logs);
-        }
-
-        userRepository.deleteById(userId);
+       // 완전히 삭제
+        userRepository.delete(user);
     }
 }

@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,7 @@ public class IntakeService {
     private final IntakeLogRepository intakeLogRepository;
     private final UserRepository userRepository;
     private final MenuRepository menuRepository;
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     @Transactional
     public IntakeResponse createIntake(Long userId, IntakeCreateRequest request) {
@@ -40,7 +42,7 @@ public class IntakeService {
 
         LocalDateTime intakeAt = request.intakeAt() != null
                 ? request.intakeAt()
-                : LocalDateTime.now();
+                : LocalDateTime.now(KOREA_ZONE_ID);
 
         RoutineType routineType = getRoutineType(intakeAt);
         int totalCaffeine = menu.getCaffeineMg() * request.quantity();
@@ -60,7 +62,7 @@ public class IntakeService {
     }
 
     public List<IntakeResponse> getTodayIntakes(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KOREA_ZONE_ID);
 
         LocalDateTime start = today.atStartOfDay();
         LocalDateTime end = today.plusDays(1).atStartOfDay();
