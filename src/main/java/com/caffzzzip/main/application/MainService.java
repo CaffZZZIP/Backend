@@ -35,6 +35,7 @@ public class MainService {
     private final UserDailyRoutineModeRepository userDailyRoutineModeRepository;
     private final ResultService resultService;
 
+
     // 한국 시간
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
@@ -116,6 +117,7 @@ public class MainService {
                         .atStartOfDay(KST)
                         .toLocalDateTime();
 
+
         return intakeLogRepository
                 .findByUserIdAndIntakeAtBetween(userId, start, end)
                 .stream()
@@ -127,6 +129,7 @@ public class MainService {
                         .intakeTime(
                                 formatTime(log.getIntakeAt().toLocalTime())
                         )
+                        .quantity(log.getQuantity())
                         .build())
                 .toList();
     }
@@ -187,13 +190,10 @@ public class MainService {
 
         boolean isLateIntake = intakeList.stream()
                 .anyMatch(item -> {
-                    String time = item.getIntakeTime();
+                    LocalTime time =
+                            LocalTime.parse(item.getIntakeTime());
 
-                    return time.contains("오후 7")
-                            || time.contains("오후 8")
-                            || time.contains("오후 9")
-                            || time.contains("오후 10")
-                            || time.contains("오후 11");
+                    return time.getHour() >= 19;
                 });
 
         if (isLateIntake) {
@@ -218,7 +218,7 @@ public class MainService {
 
         return time.format(
                 DateTimeFormatter.ofPattern(
-                        "a hh:mm",
+                        "HH:mm",
                         Locale.KOREAN
                 )
         );

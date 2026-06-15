@@ -64,6 +64,7 @@ public class MenuService {
             case "폴바셋" -> "/images/brands/paulbassett.png";
             case "투썸플레이스" -> "/images/brands/twosomeplace.png";
             case "탐앤탐스" -> "/images/brands/tomntoms.png";
+            case "식품" -> "/images/brands/food.png";
             default -> "/images/brands/default.png";
         };
     }

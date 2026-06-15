@@ -18,5 +18,6 @@ public class MainIntakeItem {
 
     // 섭취 시간
     private String intakeTime;
-}
 
+    private int quantity;
+}
